@@ -1,0 +1,12 @@
+-- The CHECK constraint on meta_ad_creatives.service hardcoded a fixed set of
+-- service names from an early single-service setup. Services are now
+-- business-configurable via Settings (businesses.services), so a fixed
+-- DB-level enum is wrong — it silently rejects any service the business
+-- has since added or renamed, failing the INSERT in
+-- /api/meta-ads/generate/video and /generate/image after the background
+-- job had already been dispatched.
+--
+-- The Create Ad modal only offers the business's configured service names
+-- (business.services), so no DB-level enum is needed to validate this —
+-- the UI is the source of truth for what's selectable.
+ALTER TABLE meta_ad_creatives DROP CONSTRAINT IF EXISTS chk_meta_ad_creatives_service;

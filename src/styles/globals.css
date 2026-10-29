@@ -1,0 +1,459 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   1. TOKENS & VARIABLES
+   ========================================================================== */
+:root {
+  /* Layout */
+  --sidebar-primary-width: 64px;
+  --sidebar-secondary-width: 240px;
+  --navbar-height: 56px;
+
+  /* Typography */
+  --font-sans: 'Kraken-Product', 'IBM Plex Sans', Helvetica, Arial, sans-serif;
+  --font-display: 'Kraken-Brand', 'IBM Plex Sans', Helvetica, Arial, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+
+  /* Spacing */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 25px -5px rgb(0 0 0 / 0.15);
+
+  /* Z-Index */
+  --z-base: 0;
+  --z-nav: 40;
+  --z-modal: 50;
+  --z-tooltip: 60;
+  --background: var(--color-background);
+  --foreground: var(--color-text);
+  --card: var(--color-background);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-background);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-secondary);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-secondary-hover);
+  --accent-foreground: var(--color-text);
+  --destructive: var(--color-danger);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-primary);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* Light Theme - Kraken Design System */
+:root {
+  /* Brand Colors */
+  --color-background: #ffffff;
+  --color-surface: rgba(148, 151, 169, 0.08);
+  --color-primary: #7132f5;
+  --color-primary-hover: #5741d8;
+  --color-primary-active: #5b1ecf;
+  --color-primary-subtle: rgba(133, 91, 251, 0.16);
+  --color-primary-border: #5741d8;
+
+  /* Neutral Colors */
+  --color-secondary: rgba(148, 151, 169, 0.08);
+  --color-secondary-hover: rgba(148, 151, 169, 0.16);
+  --color-border: #dedee5;
+
+  /* Typography Colors */
+  --color-text: #101114;
+  --color-text-muted: #686b82;
+  --color-text-secondary: #9497a9;
+  --color-text-disabled: #9497a9;
+
+  /* Semantic Colors */
+  --color-danger: #ef4444;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+
+  --color-success: #149e61;
+  --color-success-bg: rgba(20, 158, 97, 0.16);
+  --color-success-border: #149e61;
+
+  --color-warning: #f59e0b;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  --color-info: #3b82f6;
+  --color-info-bg: #eff6ff;
+
+  /* Shadows */
+  --shadow-sm: rgba(16, 24, 40, 0.04) 0px 1px 4px;
+  --shadow-md: rgba(0, 0, 0, 0.03) 0px 4px 24px;
+}
+
+/* ==========================================================================
+   2. RESET & BASE STYLES
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul, ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+}
+
+input:focus {
+  outline: none !important;
+  border-color: var(--color-border) !important;
+  box-shadow: 0 0 0 2px var(--color-border) !important;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   3. ANIMATIONS
+   ========================================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.2s ease-in-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* ==========================================================================
+   4. UTILITY CLASSES
+   ========================================================================== */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1 1 0%; }
+.flex-shrink-0 { flex-shrink: 0; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+
+.gap-1 { gap: var(--spacing-1); }
+.gap-2 { gap: var(--spacing-2); }
+.gap-3 { gap: var(--spacing-3); }
+.gap-4 { gap: var(--spacing-4); }
+.gap-6 { gap: var(--spacing-6); }
+.gap-8 { gap: var(--spacing-8); }
+
+.m-0 { margin: 0; }
+.mt-1 { margin-top: var(--spacing-1); }
+.mt-2 { margin-top: var(--spacing-2); }
+.mt-4 { margin-top: var(--spacing-4); }
+.mt-8 { margin-top: var(--spacing-8); }
+.mb-4 { margin-bottom: var(--spacing-4); }
+.mb-8 { margin-bottom: var(--spacing-8); }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.mr-2 { margin-right: var(--spacing-2); }
+
+.p-4 { padding: var(--spacing-4); }
+.p-6 { padding: var(--spacing-6); }
+.p-8 { padding: var(--spacing-8); }
+.px-2 { padding-left: var(--spacing-2); padding-right: var(--spacing-2); }
+.px-3 { padding-left: var(--spacing-3); padding-right: var(--spacing-3); }
+.px-4 { padding-left: var(--spacing-4); padding-right: var(--spacing-4); }
+.px-6 { padding-left: var(--spacing-6); padding-right: var(--spacing-6); }
+.px-8 { padding-left: var(--spacing-8); padding-right: var(--spacing-8); }
+.py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+.py-2 { padding-top: var(--spacing-2); padding-bottom: var(--spacing-2); }
+.py-3 { padding-top: var(--spacing-3); padding-bottom: var(--spacing-3); }
+.py-4 { padding-top: var(--spacing-4); padding-bottom: var(--spacing-4); }
+
+.w-full { width: 100%; }
+.w-screen { width: 100vw; }
+.w-8 { width: 2rem; }
+.w-10 { width: 2.5rem; }
+.w-12 { width: 3rem; }
+.w-16 { width: 4rem; }
+.w-64 { width: 16rem; }
+.hover\:w-64:hover { width: 16rem; }
+.max-w-md { max-width: 28rem; }
+.max-w-sm { max-width: 24rem; }
+.max-w-7xl { max-width: 80rem; }
+
+.h-full { height: 100%; }
+.h-screen { height: 100vh; }
+.h-8 { height: 2rem; }
+.h-9 { height: 2.25rem; }
+.h-10 { height: 2.5rem; }
+.h-11 { height: 2.75rem; }
+.h-12 { height: 3rem; }
+.h-14 { height: 3.5rem; }
+.h-15 { height: 58px; }
+.h-16 { height: 4rem; }
+.min-h-screen { min-height: 100vh; }
+
+.bg-background { background-color: var(--color-background); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-primary { background-color: var(--color-primary); }
+.bg-primary-subtle { background-color: var(--color-primary-subtle); }
+.bg-secondary { background-color: var(--color-secondary); }
+.bg-secondary-hover { background-color: var(--color-secondary-hover); }
+.bg-text { background-color: var(--color-text); }
+.text-background { color: var(--color-background); }
+.bg-transparent { background-color: transparent; }
+.bg-white { background-color: #ffffff; }
+
+.bg-danger { background-color: var(--color-danger); color: #ffffff; }
+.bg-danger-bg { background-color: var(--color-danger-bg); }
+.bg-success { background-color: var(--color-success); color: #ffffff; }
+.bg-success-bg { background-color: var(--color-success-bg); }
+.bg-warning { background-color: var(--color-warning); color: #ffffff; }
+.bg-warning-bg { background-color: var(--color-warning-bg); }
+.bg-info { background-color: var(--color-info); color: #ffffff; }
+.bg-info-bg { background-color: var(--color-info-bg); }
+
+.text-primary { color: var(--color-primary); }
+.text-danger { color: var(--color-danger); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-info { color: var(--color-info); }
+.text-text { color: var(--color-text); }
+.text-muted { color: var(--color-text-muted); }
+.text-disabled { color: var(--color-text-disabled); }
+.text-white { color: #ffffff; }
+
+.text-xs { font-size: var(--text-xs); line-height: 1rem; }
+.text-sm { font-size: var(--text-sm); line-height: 1.25rem; }
+.text-base { font-size: var(--text-base); line-height: 1.5rem; }
+.text-lg { font-size: var(--text-lg); line-height: 1.75rem; }
+.text-xl { font-size: var(--text-xl); line-height: 1.75rem; }
+.text-2xl { font-size: var(--text-2xl); line-height: 2rem; }
+.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+.text-center { text-align: center; }
+
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-full { border-radius: var(--radius-full); }
+
+.border { border-width: 1px; border-style: solid; border-color: var(--color-border); }
+.border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: var(--color-border); }
+.border-t { border-top-width: 1px; border-top-style: solid; border-color: var(--color-border); }
+.border-r { border-right-width: 1px; border-right-style: solid; border-color: var(--color-border); }
+.border-l { border-left-width: 1px; border-left-style: solid; border-color: var(--color-border); }
+.border-none { border-style: none; }
+.border-default { border-color: var(--color-border); }
+.border-primary { border-color: var(--color-primary); }
+.border-danger { border-color: var(--color-danger); }
+
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+.outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+.focus\:ring-2:focus { box-shadow: 0 0 0 2px var(--color-primary); }
+
+.transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
+
+.hover\:bg-surface:hover { background-color: var(--color-surface); }
+.hover\:bg-secondary:hover { background-color: var(--color-secondary); }
+.hover\:bg-secondary-hover:hover { background-color: var(--color-secondary-hover); }
+.hover\:bg-primary-hover:hover { background-color: var(--color-primary-hover); }
+.hover\:text-text:hover { color: var(--color-text); }
+.hover\:underline:hover { text-decoration: underline; }
+
+.overflow-hidden { overflow: hidden; }
+.overflow-auto { overflow: auto; }
+.overflow-y-auto { overflow-y: auto; }
+
+.z-nav { z-index: var(--z-nav); }
+.z-base { z-index: var(--z-base); }
+.z-50 { z-index: var(--z-modal); }
+
+.fixed { position: fixed; }
+.absolute { position: absolute; }
+.relative { position: relative; }
+.left-0 { left: 0; }
+.top-0 { top: 0; }
+.top-14 { top: 3.5rem; }
+.top-15 { top: 58px; }
+.top-16 { top: 4rem; }
+.right-0 { right: 0; }
+.bottom-0 { bottom: 0; }
+
+.whitespace-nowrap { white-space: nowrap; }
+.inline-flex { display: inline-flex; }
+
+.opacity-0 { opacity: 0; }
+.opacity-50 { opacity: 0.5; }
+.opacity-90 { opacity: 0.9; }
+.opacity-100 { opacity: 1; }
+.hover\:opacity-90:hover { opacity: 0.9; }
+.group:hover .group-hover\:opacity-100 { opacity: 1; }
+.pointer-events-none { pointer-events: none; }
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /* Clean, thin custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full border-[1px] border-solid border-transparent bg-clip-padding;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}

@@ -1,0 +1,5 @@
+-- Each businesses.services[] entry may carry an optional `category` key so
+-- AI generation prompts can key off it directly instead of re-deriving a
+-- category from the service's `name` string. It lives inside the JSONB
+-- array, so there is no schema change and no backfill; a service with no
+-- category set just falls back to name-matching.
