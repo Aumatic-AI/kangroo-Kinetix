@@ -8,7 +8,7 @@
 
 Social Media generates image or video posts with AI, shows exactly how each one will look on every target platform before anything goes live, and publishes them — now or on a schedule — across Facebook, Instagram, LinkedIn, X, TikTok, and YouTube.
 
-Like Outreach, it's built around one idea: **what you approve is what goes out.** A post is generated once, previewed exactly as it'll appear on each platform, and only then published — with every platform tracked as its own independent outcome, so one platform failing never drags the others down with it.
+It's built around one idea: **what you approve is what goes out.** A post is generated once, previewed exactly as it'll appear on each platform, and only then published — with every platform tracked as its own independent outcome, so one platform failing never drags the others down with it.
 
 ## 2. Features
 

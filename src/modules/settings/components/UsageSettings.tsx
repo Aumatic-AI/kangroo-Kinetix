@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ImageIcon, Video, Send, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ImageIcon, Video, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Section } from "@/components/ui/Section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -168,13 +168,6 @@ export function UsageSettings() {
                   countLabel={`${data.counts.videoAdCount} generated`}
                   perUnit={perUnitCost(data.estimate.video, data.counts.videoAdCount, typicalUnitCosts().video)}
                   total={data.estimate.video}
-                />
-                <UsageRow
-                  icon={Send}
-                  name="Outreach leads"
-                  countLabel={`${data.counts.outreachLeadCount} scraped + verified`}
-                  perUnit={perUnitCost(data.estimate.outreach, data.counts.outreachLeadCount, typicalUnitCosts().outreachLead)}
-                  total={data.estimate.outreach}
                 />
               </TableBody>
             </Table>

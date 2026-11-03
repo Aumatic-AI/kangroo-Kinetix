@@ -320,7 +320,6 @@ export type Database = {
           logo_asset_id: string | null
           logo_url: string | null
           name: string
-          outreach_settings: Json
           pain_points: string | null
           services: Json
           settings: Json
@@ -347,7 +346,6 @@ export type Database = {
           logo_asset_id?: string | null
           logo_url?: string | null
           name: string
-          outreach_settings?: Json
           pain_points?: string | null
           services?: Json
           settings?: Json
@@ -374,7 +372,6 @@ export type Database = {
           logo_asset_id?: string | null
           logo_url?: string | null
           name?: string
-          outreach_settings?: Json
           pain_points?: string | null
           services?: Json
           settings?: Json
@@ -872,57 +869,6 @@ export type Database = {
           },
         ]
       }
-      email_events: {
-        Row: {
-          business_id: string
-          channel: string
-          contact_id: string | null
-          event_type: Database["public"]["Enums"]["email_event_type"]
-          id: string
-          occurred_at: string
-          outreach_campaign_id: string | null
-          provider_message_id: string | null
-          raw_data: Json | null
-        }
-        Insert: {
-          business_id: string
-          channel: string
-          contact_id?: string | null
-          event_type: Database["public"]["Enums"]["email_event_type"]
-          id?: string
-          occurred_at?: string
-          outreach_campaign_id?: string | null
-          provider_message_id?: string | null
-          raw_data?: Json | null
-        }
-        Update: {
-          business_id?: string
-          channel?: string
-          contact_id?: string | null
-          event_type?: Database["public"]["Enums"]["email_event_type"]
-          id?: string
-          occurred_at?: string
-          outreach_campaign_id?: string | null
-          provider_message_id?: string | null
-          raw_data?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_events_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_events_outreach_campaign_id_fkey"
-            columns: ["outreach_campaign_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       leads: {
         Row: {
           ad_id: string | null
@@ -1129,266 +1075,6 @@ export type Database = {
             columns: ["studio_session_id"]
             isOneToOne: false
             referencedRelation: "studio_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_campaign_leads: {
-        Row: {
-          id: string
-          lead_id: string
-          outreach_campaign_id: string
-          sent_at: string | null
-          status: string
-        }
-        Insert: {
-          id?: string
-          lead_id: string
-          outreach_campaign_id: string
-          sent_at?: string | null
-          status?: string
-        }
-        Update: {
-          id?: string
-          lead_id?: string
-          outreach_campaign_id?: string
-          sent_at?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_campaign_leads_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_campaign_leads_outreach_campaign_id_fkey"
-            columns: ["outreach_campaign_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_campaign_lists: {
-        Row: {
-          created_at: string
-          id: string
-          list_id: string
-          outreach_campaign_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          list_id: string
-          outreach_campaign_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          list_id?: string
-          outreach_campaign_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_campaign_lists_list_id_fkey"
-            columns: ["list_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_lead_lists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_campaign_lists_outreach_campaign_id_fkey"
-            columns: ["outreach_campaign_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_campaigns: {
-        Row: {
-          business_id: string
-          created_at: string
-          cta_link: string | null
-          cta_text: string | null
-          daily_limit: number
-          external_campaign_id: string | null
-          generated_body: Json | null
-          generated_subject: string | null
-          goal: string | null
-          id: string
-          list_id: string | null
-          message_brief: string | null
-          name: string
-          revision_history: Json
-          service_type: string | null
-          status: Database["public"]["Enums"]["campaign_status"]
-          target_region: string | null
-          tone: string | null
-          updated_at: string
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          cta_link?: string | null
-          cta_text?: string | null
-          daily_limit?: number
-          external_campaign_id?: string | null
-          generated_body?: Json | null
-          generated_subject?: string | null
-          goal?: string | null
-          id?: string
-          list_id?: string | null
-          message_brief?: string | null
-          name: string
-          revision_history?: Json
-          service_type?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          target_region?: string | null
-          tone?: string | null
-          updated_at?: string
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          cta_link?: string | null
-          cta_text?: string | null
-          daily_limit?: number
-          external_campaign_id?: string | null
-          generated_body?: Json | null
-          generated_subject?: string | null
-          goal?: string | null
-          id?: string
-          list_id?: string | null
-          message_brief?: string | null
-          name?: string
-          revision_history?: Json
-          service_type?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          target_region?: string | null
-          tone?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_campaigns_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_campaigns_list_id_fkey"
-            columns: ["list_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_lead_lists"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_lead_lists: {
-        Row: {
-          business_id: string
-          created_at: string
-          id: string
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          id?: string
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_lead_lists_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_leads: {
-        Row: {
-          business_id: string
-          city: string | null
-          company: string | null
-          country: string | null
-          created_at: string
-          email: string
-          email_verification_status: string
-          first_name: string | null
-          id: string
-          last_name: string | null
-          linkedin_url: string | null
-          list_id: string | null
-          phone: string | null
-          source: string
-          status: Database["public"]["Enums"]["lead_status"]
-          updated_at: string
-        }
-        Insert: {
-          business_id: string
-          city?: string | null
-          company?: string | null
-          country?: string | null
-          created_at?: string
-          email: string
-          email_verification_status?: string
-          first_name?: string | null
-          id?: string
-          last_name?: string | null
-          linkedin_url?: string | null
-          list_id?: string | null
-          phone?: string | null
-          source?: string
-          status?: Database["public"]["Enums"]["lead_status"]
-          updated_at?: string
-        }
-        Update: {
-          business_id?: string
-          city?: string | null
-          company?: string | null
-          country?: string | null
-          created_at?: string
-          email?: string
-          email_verification_status?: string
-          first_name?: string | null
-          id?: string
-          last_name?: string | null
-          linkedin_url?: string | null
-          list_id?: string | null
-          phone?: string | null
-          source?: string
-          status?: Database["public"]["Enums"]["lead_status"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_leads_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_leads_list_id_fkey"
-            columns: ["list_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_lead_lists"
             referencedColumns: ["id"]
           },
         ]

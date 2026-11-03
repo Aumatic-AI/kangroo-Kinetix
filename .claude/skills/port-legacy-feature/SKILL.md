@@ -1,5 +1,5 @@
 ---
-description: Port a feature from the legacy n8n/Next.js project (under projects/) into Kinetix's clean architecture. Use whenever building something that already exists in the old project — Meta Ads campaign features, social publishing, outreach workflows, etc.
+description: Port a feature from the legacy n8n/Next.js project (under projects/) into Kinetix's clean architecture. Use whenever building something that already exists in the old project — Meta Ads campaign features, social publishing, etc.
 ---
 
 # Porting a legacy feature into Kinetix

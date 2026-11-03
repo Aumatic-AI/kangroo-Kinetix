@@ -49,11 +49,6 @@ export const IMAGE_AD_COST_INR = 4.8;
 export const STUDIO_QUESTIONS_COST_INR = 1.22;
 export const STUDIO_IMAGE_COST_INR = 3.82;
 
-/** Outreach lead — Apify scrape + MillionVerifier check. Every row actually
- * saved to `outreach_leads` has already passed verification (unverified
- * scrapes are discarded, not stored), so one saved lead = one of each. */
-export const OUTREACH_LEAD_COST: CostRange = { minINR: 0.19, maxINR: 0.29, confidence: "reliable" };
-
 /** Video ad (Meta Ads + Social) — per real scene count, read from the
  * generated script's own line count (`ad_script.script.length` on Meta Ads
  * creatives, `metadata.script.length` on Social's `media_assets`). Split
@@ -71,7 +66,6 @@ export interface UsageCounts {
   imageAdCount: number;
   studioSessionCount: number;
   studioImageCount: number; // first image + every chat edit, combined
-  outreachLeadCount: number;
   /** One entry per generated video, its real scene count. */
   videoSceneCounts: number[];
 }
@@ -80,7 +74,6 @@ export interface UsageEstimate {
   imageAd: CostRange;
   studio: CostRange;
   video: CostRange;
-  outreach: CostRange;
   total: CostRange;
 }
 
@@ -94,7 +87,6 @@ export interface TypicalUnitCosts {
   imageAd: CostRange;
   studioImage: CostRange;
   video: CostRange;
-  outreachLead: CostRange;
 }
 
 /** Baseline per-unit rate for each feature, independent of any real usage —
@@ -105,7 +97,6 @@ export function typicalUnitCosts(): TypicalUnitCosts {
     imageAd: { minINR: IMAGE_AD_COST_INR, maxINR: IMAGE_AD_COST_INR, confidence: "reliable" },
     studioImage: { minINR: STUDIO_IMAGE_COST_INR, maxINR: STUDIO_IMAGE_COST_INR, confidence: "reliable" },
     video: videoAdCost(TYPICAL_VIDEO_SCENE_COUNT),
-    outreachLead: OUTREACH_LEAD_COST,
   };
 }
 
@@ -117,13 +108,7 @@ export function estimateUsageCost(counts: UsageCounts): UsageEstimate {
 
   const video = sumRanges(counts.videoSceneCounts.map(videoAdCost));
 
-  const outreach: CostRange = {
-    minINR: round2(counts.outreachLeadCount * OUTREACH_LEAD_COST.minINR),
-    maxINR: round2(counts.outreachLeadCount * OUTREACH_LEAD_COST.maxINR),
-    confidence: "reliable",
-  };
+  const total = sumRanges([imageAd, studio, video]);
 
-  const total = sumRanges([imageAd, studio, video, outreach]);
-
-  return { imageAd, studio, video, outreach, total };
+  return { imageAd, studio, video, total };
 }

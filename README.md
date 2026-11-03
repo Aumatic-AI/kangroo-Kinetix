@@ -1,6 +1,6 @@
 # Kinetix Marketing Automation Platform
 
-Kinetix is a single-tenant marketing automation platform built for one client (Kangrooo, a Canadian space and venue booking marketplace) with Next.js, Supabase, and Tailwind CSS. It consolidates four product areas — Meta Ads, Social Media, Outreach, and Settings — into one codebase, one Postgres schema, and one background-job runner (Inngest).
+Kinetix is a single-tenant marketing automation platform built for one client (Kangrooo, a Canadian space and venue booking marketplace) with Next.js, Supabase, and Tailwind CSS. It consolidates product areas — Meta Ads, Social Media, Listings, and Settings — into one codebase, one Postgres schema, and one background-job runner (Inngest).
 
 For a deeper tour of the system than this file covers, see [`docs/index.md`](docs/index.md). For AI-assistant-specific conventions (Claude Code), see [`CLAUDE.md`](CLAUDE.md) and [`DESIGN.md`](DESIGN.md).
 
@@ -31,7 +31,7 @@ Open `.env.local` and fill in your actual Supabase credentials. You can find the
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (required — Inngest background jobs use this to bypass RLS)
 
-See `docs/architecture/system_design.md` and the module docs under `docs/modules/` for the AI-provider and integration keys (OpenAI, Kie AI, ElevenLabs, Apify, Instantly.ai, Meta, etc.) each feature needs.
+See `docs/architecture/system_design.md` and the module docs under `docs/modules/` for the AI-provider and integration keys (OpenAI, Kie AI, ElevenLabs, Meta, etc.) each feature needs.
 
 ### 3. Database Setup (Supabase)
 
@@ -89,10 +89,9 @@ kinetix/
 │   │   ├── dashboard/
 │   │   ├── meta-ads/         # Ad creative generation, competitor/self-ad intelligence (built)
 │   │   ├── social/            # OAuth, content generation, publishing (built)
-│   │   ├── outreach/          # Lead lists, scraping, campaigns, Instantly.ai sending (built)
 │   │   └── settings/
 │   │       └── each module has its own pages/, components/, hooks/, services/, types/
-│   ├── services/              # External integrations (Supabase, Inngest jobs, AI orchestrator, Instantly, Meta Graph API, …)
+│   ├── services/              # External integrations (Supabase, Inngest jobs, AI orchestrator, Meta Graph API, …)
 │   ├── prompts/               # AI prompt-building functions, one file per domain
 │   ├── jobs/                  # Inngest background job definitions (*.job.ts)
 │   ├── styles/                # globals.css — design tokens + Tailwind v4 setup
@@ -109,6 +108,6 @@ kinetix/
 - **Backend/Database:** Supabase (PostgreSQL, Row Level Security, Supabase Auth)
 - **Background jobs:** Inngest (event-driven step functions for long-running AI/scraping work)
 - **Data fetching:** TanStack Query (`@tanstack/react-query`) + the Supabase JS client
-- **AI providers:** OpenAI, Kie AI, ElevenLabs, AssemblyAI, Apify, Instantly.ai — always called through `aiOrchestrator` (`src/services/ai/orchestrator.ts`), never a provider SDK directly from a route
+- **AI providers:** OpenAI, Kie AI, ElevenLabs, AssemblyAI — always called through `aiOrchestrator` (`src/services/ai/orchestrator.ts`), never a provider SDK directly from a route
 
 See [`docs/architecture/system_design.md`](docs/architecture/system_design.md) for the full request/job flow.

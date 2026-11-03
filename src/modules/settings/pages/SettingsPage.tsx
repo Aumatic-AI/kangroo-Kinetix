@@ -9,7 +9,7 @@ import { UnsavedChangesBar } from "@/components/ui/UnsavedChangesBar";
 import { Switch } from "@/components/ui/Switch";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { BusinessSettings } from "../types/settings.types";
-import { Field, ServicesEditor, WeekdayToggle, TimezoneSelect, VideoReferenceUploader, LogoUploader } from "../components/shared";
+import { Field, ServicesEditor, VideoReferenceUploader, LogoUploader } from "../components/shared";
 import { UsageSettings } from "../components/UsageSettings";
 
 const SETTINGS_TABS = [
@@ -24,7 +24,7 @@ const SETTINGS_TABS = [
  * The one Settings page, reached at /settings — no secondary sidebar and
  * no further route-level sub-pages, just this one page backed by the
  * businesses table. Every field here maps to a column that's actually read
- * somewhere else in the app (AI prompt context, Outreach defaults, Meta Ads
+ * somewhere else in the app (AI prompt context, Meta Ads
  * defaults). Columns with no real consumer yet
  * (keywords, business_colors, guidelines) are deliberately left out rather
  * than guessed at. The "so many settings" problem is solved with in-page
@@ -53,7 +53,7 @@ export function SettingsPage() {
       <div className="max-w-4xl mx-auto space-y-6 pb-10">
         <div>
           <h1 className="text-2xl font-bold text-text">Settings</h1>
-          <p className="text-sm text-muted mt-1">Business context used across AI generation and outreach.</p>
+          <p className="text-sm text-muted mt-1">Business context used across AI generation.</p>
         </div>
 
         <TabSwitch value="general" onValueChange={() => {}} items={SETTINGS_TABS} />
@@ -76,7 +76,6 @@ export function SettingsPage() {
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(data);
   const patch = (p: Partial<BusinessSettings>) => setForm((prev) => (prev ? { ...prev, ...p } : prev));
-  const patchOutreach = (p: Partial<BusinessSettings["outreachSettings"]>) => patch({ outreachSettings: { ...form.outreachSettings, ...p } });
 
   const handleSave = async () => {
     setError("");
@@ -96,7 +95,7 @@ export function SettingsPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold text-text">Settings</h1>
-        <p className="text-sm text-muted mt-1">Business context used across AI generation and outreach.</p>
+        <p className="text-sm text-muted mt-1">Business context used across AI generation.</p>
       </div>
 
       {error && <p className="text-sm text-danger font-medium">{error}</p>}
@@ -142,49 +141,13 @@ export function SettingsPage() {
       )}
 
       {activeTab === "services" && (
-          <Section title="Services" description="What this business actually offers — used so AI-facing features (e.g. Outreach drafts) know what each service means.">
+          <Section title="Services" description="What this business actually offers — used so AI-facing features know what each service means.">
             <ServicesEditor services={form.services} onChange={(services) => patch({ services })} />
           </Section>
       )}
 
       {activeTab === "automation" && (
           <div className="space-y-4">
-            <Section title="Outreach Defaults" description="Default sending pace and schedule for new outreach campaigns.">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Daily Send Limit">
-                    <Input type="number" min="1" value={form.outreachSettings.dailyLimit} onChange={(e) => patchOutreach({ dailyLimit: Number(e.target.value) })} />
-                  </Field>
-                  <Field label="Timezone">
-                    <TimezoneSelect value={form.outreachSettings.timezone} onChange={(timezone) => patchOutreach({ timezone })} />
-                  </Field>
-                </div>
-
-                <div className="flex flex-wrap items-start gap-4">
-                  <div className="flex-1 min-w-60">
-                    <Field label="Sending Days">
-                      <WeekdayToggle
-                        selected={form.outreachSettings.days}
-                        onToggle={(day) =>
-                          patchOutreach({ days: form.outreachSettings.days.includes(day) ? form.outreachSettings.days.filter((d) => d !== day) : [...form.outreachSettings.days, day] })
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <div className="w-36 shrink-0">
-                    <Field label="Window Start">
-                      <Input type="time" value={form.outreachSettings.sendWindow.from} onChange={(e) => patchOutreach({ sendWindow: { ...form.outreachSettings.sendWindow, from: e.target.value } })} />
-                    </Field>
-                  </div>
-                  <div className="w-36 shrink-0">
-                    <Field label="Window End">
-                      <Input type="time" value={form.outreachSettings.sendWindow.to} onChange={(e) => patchOutreach({ sendWindow: { ...form.outreachSettings.sendWindow, to: e.target.value } })} />
-                    </Field>
-                  </div>
-                </div>
-              </div>
-            </Section>
-
             <Section title="Meta Ads Defaults" description="Applied automatically when launching a new campaign or ad set.">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input

@@ -24,8 +24,8 @@ function getPageItems(page: number, totalPages: number): PageItem[] {
 }
 
 /** The one page-number + prev/next control used everywhere a list is
- * paginated (Meta Ads Campaigns/Reports/Leads/Ad Library, Social Posts,
- * Outreach Leads/Campaigns) — renders nothing for a single page. */
+ * paginated (Meta Ads Campaigns/Reports/Leads/Ad Library, Social Posts)
+ * — renders nothing for a single page. */
 export function Pagination({ page, totalPages, onPageChange, className }: PaginationProps) {
   if (totalPages <= 1) return null;
 

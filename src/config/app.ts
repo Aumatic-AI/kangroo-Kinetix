@@ -4,7 +4,6 @@ export const appConfig = {
   description: "AI Automation Platform",
   features: {
     metaAds: true,
-    outreach: true,
     socialMedia: true,
   },
 } as const;

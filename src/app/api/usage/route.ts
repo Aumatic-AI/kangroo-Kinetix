@@ -15,7 +15,6 @@ export interface UsageResponse {
     videoAdCount: number;
     studioSessionCount: number;
     studioImageCount: number;
-    outreachLeadCount: number;
   };
   estimate: UsageEstimate;
 }
@@ -58,7 +57,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(emptyResponse(month, periodLabel));
     }
 
-    const [{ data: creativeRows }, { count: studioSessionCount }, { data: assetRows }, { count: outreachLeadCount }] = await Promise.all([
+    const [{ data: creativeRows }, { count: studioSessionCount }, { data: assetRows }] = await Promise.all([
       supabase
         .from("meta_ad_creatives")
         .select("type, studio_session_id, ad_script, revision_history")
@@ -76,12 +75,6 @@ export async function GET(request: NextRequest) {
         .select("type, metadata")
         .eq("business_id", businessId)
         .eq("source", "ai_generated")
-        .gte("created_at", startOfMonth.toISOString())
-        .lt("created_at", startOfNextMonth.toISOString()),
-      supabase
-        .from("outreach_leads")
-        .select("id", { count: "exact", head: true })
-        .eq("business_id", businessId)
         .gte("created_at", startOfMonth.toISOString())
         .lt("created_at", startOfNextMonth.toISOString()),
     ]);
@@ -116,7 +109,6 @@ export async function GET(request: NextRequest) {
       imageAdCount,
       studioSessionCount: studioSessionCount || 0,
       studioImageCount,
-      outreachLeadCount: outreachLeadCount || 0,
       videoSceneCounts,
     };
 
@@ -130,8 +122,7 @@ export async function GET(request: NextRequest) {
         videoAdCount: videoSceneCounts.length,
         studioSessionCount: studioSessionCount || 0,
         studioImageCount,
-        outreachLeadCount: outreachLeadCount || 0,
-      },
+        },
       estimate,
     };
 
@@ -143,11 +134,11 @@ export async function GET(request: NextRequest) {
 }
 
 function emptyResponse(month: string, periodLabel: string): UsageResponse {
-  const counts: UsageCounts = { imageAdCount: 0, studioSessionCount: 0, studioImageCount: 0, outreachLeadCount: 0, videoSceneCounts: [] };
+  const counts: UsageCounts = { imageAdCount: 0, studioSessionCount: 0, studioImageCount: 0, videoSceneCounts: [] };
   return {
     month,
     periodLabel,
-    counts: { imageAdCount: 0, videoAdCount: 0, studioSessionCount: 0, studioImageCount: 0, outreachLeadCount: 0 },
+    counts: { imageAdCount: 0, videoAdCount: 0, studioSessionCount: 0, studioImageCount: 0 },
     estimate: estimateUsageCost(counts),
   };
 }

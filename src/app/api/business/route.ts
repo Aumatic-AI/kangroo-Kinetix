@@ -12,7 +12,7 @@ export async function GET() {
 
     const { data: business, error } = await supabase
       .from("businesses")
-      .select("id, name, website_url, logo_asset_id, industry, services, outreach_settings")
+      .select("id, name, website_url, logo_asset_id, industry, services")
       .limit(1)
       .single();
 

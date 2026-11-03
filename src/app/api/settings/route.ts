@@ -18,7 +18,6 @@ export async function GET() {
     if (error || !business) return NextResponse.json({ error: "No business found" }, { status: 404 });
 
     const settingsJson = (business.settings as Record<string, any> | null) || {};
-    const outreach = (business.outreach_settings as Record<string, any> | null) || {};
     const services = Array.isArray(business.services) ? (business.services as Record<string, any>[]) : [];
 
     const settings: BusinessSettings = {
@@ -36,12 +35,6 @@ export async function GET() {
       targetAudience: business.target_audience || "",
       services: services.map((s) => ({ name: s.name || "", description: s.description || undefined })),
       targetCountries: Array.isArray(business.target_countries) ? (business.target_countries as string[]) : [],
-      outreachSettings: {
-        dailyLimit: outreach.daily_limit ?? 50,
-        timezone: outreach.timezone || "America/Detroit",
-        days: Array.isArray(outreach.days) ? outreach.days : [0, 1, 2, 3, 4, 5, 6],
-        sendWindow: { from: outreach.send_window?.from || "09:00", to: outreach.send_window?.to || "17:00" },
-      },
       metaAdsAdvantageAudienceDefault: !!settingsJson.meta_ads?.advantage_audience_default,
       videoReferenceEnabled: business.video_reference_enabled,
       videoReferenceMaleUrl: business.video_reference_male_url,
@@ -89,12 +82,6 @@ export async function POST(request: Request) {
         target_audience: body.targetAudience || null,
         services: body.services.filter((s) => s.name.trim()) as any,
         target_countries: body.targetCountries,
-        outreach_settings: {
-          daily_limit: body.outreachSettings.dailyLimit,
-          timezone: body.outreachSettings.timezone,
-          days: body.outreachSettings.days,
-          send_window: body.outreachSettings.sendWindow,
-        },
         settings: { ...existingSettingsJson, meta_ads: { ...existingSettingsJson.meta_ads, advantage_audience_default: body.metaAdsAdvantageAudienceDefault } },
         video_reference_enabled: body.videoReferenceEnabled,
       })

@@ -45,13 +45,6 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = ([
     module: "listings",
   },
   {
-    id: "outreach",
-    label: "Outreach",
-    href: ROUTES.OUTREACH.DASHBOARD,
-    icon: Send,
-    module: "outreach",
-  },
-  {
     id: "settings",
     label: "Settings",
     href: ROUTES.SETTINGS.ROOT,
@@ -95,26 +88,6 @@ export const SECONDARY_NAV_ITEMS: Record<
       label: "Lead Responses",
       href: ROUTES.META_ADS.LEADS,
       icon: Users,
-    },
-  ],
-  outreach: [
-    {
-      id: "or-dashboard",
-      label: "Dashboard",
-      href: ROUTES.OUTREACH.DASHBOARD,
-      icon: LayoutDashboard,
-    },
-    {
-      id: "or-leads",
-      label: "Leads",
-      href: ROUTES.OUTREACH.LEADS,
-      icon: Users,
-    },
-    {
-      id: "or-campaigns",
-      label: "Campaigns",
-      href: ROUTES.OUTREACH.CAMPAIGNS,
-      icon: Megaphone,
     },
   ],
   social: [

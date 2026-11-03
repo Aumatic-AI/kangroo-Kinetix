@@ -18,13 +18,6 @@ export const ROUTES = {
     AD_STUDIO: "/meta-ads/ad-library/studio",
     AD_STUDIO_SESSION: (sessionId: string) => `/meta-ads/ad-library/studio/${sessionId}`,
   },
-  OUTREACH: {
-    DASHBOARD: "/outreach",
-    LEADS: "/outreach/leads",
-    CAMPAIGNS: "/outreach/campaigns",
-    CAMPAIGN_NEW: "/outreach/campaigns/new",
-    CAMPAIGN_DETAIL: (id: string) => `/outreach/campaigns/${id}`,
-  },
   SOCIAL: {
     DASHBOARD: "/social",
     CONNECTED_ACCOUNTS: "/social/connected-accounts",

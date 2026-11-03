@@ -1,7 +1,6 @@
 import { Users } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ACCENT, CHART_TOOLTIP_STYLE, SectionTitle, Card, EmptyState, chartTickInterval } from "@/components/global/DashboardKit";
-import { FEATURES } from "@/config/features";
 import { RootDashboardData } from "../hooks/useDashboard";
 
 function formatShortDate(iso: string): string {
@@ -13,12 +12,12 @@ function formatShortDate(iso: string): string {
  * different sources, so a grouped bar is honest about the comparison
  * instead of quietly summing two different concepts into one number. */
 export function LeadsBySource({ data }: { data: RootDashboardData["leadsBySource"] }) {
-  const total = data.reduce((s, d) => s + d.meta + d.outreach, 0);
+  const total = data.reduce((s, d) => s + d.meta, 0);
   const tickInterval = chartTickInterval(data.length);
 
   return (
     <Card>
-      <SectionTitle icon={Users} accent={ACCENT.purple} title="New Leads by Source" />
+      <SectionTitle icon={Users} accent={ACCENT.purple} title="New Leads" />
       {!total ? (
         <EmptyState message="No new leads in the selected range." />
       ) : (
@@ -29,8 +28,7 @@ export function LeadsBySource({ data }: { data: RootDashboardData["leadsBySource
               <YAxis hide />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "var(--color-surface)" }} labelFormatter={(v) => formatShortDate(v as string)} />
               <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
-              {FEATURES.metaAds && <Bar dataKey="meta" name="Meta Ads" stackId="leads" fill={ACCENT.purple.solid} radius={[0, 0, 0, 0]} maxBarSize={28} />}
-              <Bar dataKey="outreach" name="Outreach" stackId="leads" fill={ACCENT.blue.solid} radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="meta" name="Meta Ads" stackId="leads" fill={ACCENT.purple.solid} radius={[4, 4, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -3,7 +3,6 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/supabase";
 import { MetaAdsService } from "@/modules/meta-ads/services/meta-ads.service";
-import { OutreachCampaignsService } from "@/modules/outreach/services/outreach.service";
 import { env } from "@/config/env";
 import { FEATURES } from "@/config/features";
 import { UploadPostService, SUPPORTED_UPLOAD_POST_PLATFORMS, type UploadPostProfileAnalytics } from "@/services/upload-post";
@@ -20,17 +19,14 @@ interface RootDashboardResponse {
     totalReach: number;
     metaActiveCampaigns: number;
     metaSpendCents: number;
-    outreachReplyRate: number;
-    outreachSendingNow: number;
     socialFollowers: number | null;
     socialEngagement: number | null;
   };
   funnel: { stage: string; value: number }[];
-  leadsBySource: { date: string; meta: number; outreach: number }[];
+  leadsBySource: { date: string; meta: number }[];
   reachTrend: { date: string; meta: number; social: number }[];
   moduleTrends: {
     meta: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
-    outreach: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
     social: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
   };
   channelTable: { channel: string; primaryLabel: string; primaryValue: string; resultLabel: string; resultValue: string; rateLabel: string; rateValue: string }[];
@@ -39,13 +35,12 @@ interface RootDashboardResponse {
 function emptyResponse(rangeDays: number): RootDashboardResponse {
   return {
     rangeDays,
-    kpis: { totalLeads: 0, totalReach: 0, metaActiveCampaigns: 0, metaSpendCents: 0, outreachReplyRate: 0, outreachSendingNow: 0, socialFollowers: null, socialEngagement: null },
+    kpis: { totalLeads: 0, totalReach: 0, metaActiveCampaigns: 0, metaSpendCents: 0, socialFollowers: null, socialEngagement: null },
     funnel: [{ stage: "Reach", value: 0 }, { stage: "Clicks", value: 0 }, { stage: "Leads", value: 0 }],
     leadsBySource: [],
     reachTrend: [],
     moduleTrends: {
       meta: { headline: "$0", headlineLabel: "Ad spend", secondary: "0 active campaigns", data: [] },
-      outreach: { headline: "0", headlineLabel: "Emails sent", secondary: "0 sending now", data: [] },
       social: { headline: "—", headlineLabel: "Followers", secondary: "— engagement", data: [] },
     },
     channelTable: [],
@@ -74,8 +69,7 @@ function fmtCents(cents: number): string {
 /** The root Dashboard's one call — a cross-module executive summary, each
  * module's own tab is the deep dive. Two things are combined for real
  * (both sides are literally the same kind of thing): "Total Leads" (a new
- * lead record entering the system, whether inbound from Meta or added to
- * an Outreach list) and "Total Reach" (impressions, whether from a Meta ad
+ * lead record entering the system, inbound from Meta) and "Total Reach" (impressions, whether from a Meta ad
  * or a social post) — Ad Spend/Reply Rate/Followers have no comparable
  * counterpart elsewhere so they stay per-module. `?range=` (7d/14d/30d/90d,
  * default 30d; "all" is a generous 180-day cap, not a genuine earliest-row
@@ -103,16 +97,12 @@ export async function GET(request: NextRequest) {
       { data: spendRows },
       { count: metaLeadsAllTime },
       { data: metaLeadRows },
-      { data: outreachLeadRows },
-      { rows: campaignRows },
       { data: connectionRows },
     ] = await Promise.all([
       supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
       supabase.from("ad_performance_daily").select("metric_date, spend_cents, impressions, clicks").eq("business_id", businessId).gte("metric_date", sinceDate),
       supabase.from("leads").select("id", { count: "exact", head: true }).eq("business_id", businessId),
       supabase.from("leads").select("created_at").eq("business_id", businessId).gte("created_at", since),
-      supabase.from("outreach_leads").select("created_at").eq("business_id", businessId).gte("created_at", since),
-      OutreachCampaignsService.getCampaignsWithAnalytics(businessId),
       supabase.from("platform_connections").select("platform, status").eq("business_id", businessId),
     ]);
 
@@ -129,43 +119,11 @@ export async function GET(request: NextRequest) {
     const metaSpendTrend = days.map((date) => ({ date, value: spendByDay.get(date) || 0 }));
     const metaImpressionsTrend = days.map((date) => impressionsByDay.get(date) || 0);
 
-    // Outreach — reply rate is a lifetime/current signal (matches how
-    // Outreach's own dashboard treats it), sending-now is a live count,
-    // sends-in-range is the one day-level series.
-    let outreachSendingNow = 0;
-    let sentLifetime = 0;
-    let repliedLifetime = 0;
-    const activeCampaignIds: string[] = [];
-    for (const { campaign, entry } of campaignRows) {
-      if (entry.value === "sending") outreachSendingNow += 1;
-      if (entry.value === "sending" || entry.value === "sent") {
-        activeCampaignIds.push(campaign.id);
-        sentLifetime += entry.sent;
-        repliedLifetime += entry.replied;
-      }
-    }
-    const outreachReplyRate = sentLifetime > 0 ? Math.round((repliedLifetime / sentLifetime) * 1000) / 10 : 0;
-
-    let outreachSentInRange = 0;
-    let outreachTrend = days.map((date) => ({ date, value: 0 }));
-    if (activeCampaignIds.length > 0) {
-      const { data: sendRows } = await supabase
-        .from("outreach_campaign_leads")
-        .select("sent_at")
-        .in("outreach_campaign_id", activeCampaignIds)
-        .eq("status", "sent")
-        .gte("sent_at", since);
-      outreachTrend = countByDay((sendRows || []).map((r) => r.sent_at), days);
-      outreachSentInRange = outreachTrend.reduce((s, d) => s + d.value, 0);
-    }
-
-    // Leads by source — the one combined chart, both sides real DB rows in range.
+    // Leads by source — real DB rows in range.
     const metaLeadsByDay = countByDay((metaOn ? metaLeadRows || [] : []).map((r) => r.created_at), days);
-    const outreachLeadsByDay = countByDay((outreachLeadRows || []).map((r) => r.created_at), days);
-    const leadsBySource = days.map((date, i) => ({ date, meta: metaLeadsByDay[i].value, outreach: outreachLeadsByDay[i].value }));
+    const leadsBySource = days.map((date, i) => ({ date, meta: metaLeadsByDay[i].value }));
     const metaLeadsInRange = metaLeadsByDay.reduce((s, d) => s + d.value, 0);
-    const outreachLeadsInRange = outreachLeadsByDay.reduce((s, d) => s + d.value, 0);
-    const totalLeads = metaLeadsInRange + outreachLeadsInRange;
+    const totalLeads = metaLeadsInRange;
 
     // Social — connection status always live; analytics also called live
     // (no cache) on every load, best-effort beyond that.
@@ -213,8 +171,6 @@ export async function GET(request: NextRequest) {
         totalReach,
         metaActiveCampaigns: metaOn ? metaActiveCampaigns || 0 : 0,
         metaSpendCents,
-        outreachReplyRate,
-        outreachSendingNow,
         socialFollowers,
         socialEngagement,
       },
@@ -227,7 +183,6 @@ export async function GET(request: NextRequest) {
       reachTrend,
       moduleTrends: {
         meta: { headline: fmtCents(metaSpendCents), headlineLabel: "Ad spend", secondary: `${metaActiveCampaigns || 0} active campaigns`, data: metaSpendTrend },
-        outreach: { headline: outreachSentInRange.toLocaleString(), headlineLabel: "Emails sent", secondary: `${outreachSendingNow} sending now`, data: outreachTrend },
         social: {
           headline: socialFollowers !== null ? socialFollowers.toLocaleString() : "—",
           headlineLabel: "Followers",
@@ -237,7 +192,6 @@ export async function GET(request: NextRequest) {
       },
       channelTable: [
         ...(!metaOn ? [] : [{ channel: "Meta Ads", primaryLabel: "Spend", primaryValue: fmtCents(metaSpendCents), resultLabel: "Leads", resultValue: metaLeadsInRange.toLocaleString(), rateLabel: "All-time leads", rateValue: (metaLeadsAllTime || 0).toLocaleString() }]),
-        { channel: "Outreach", primaryLabel: "Sent", primaryValue: outreachSentInRange.toLocaleString(), resultLabel: "Leads added", resultValue: outreachLeadsInRange.toLocaleString(), rateLabel: "Reply rate", rateValue: `${outreachReplyRate}%` },
         { channel: "Social", primaryLabel: "Impressions", primaryValue: socialImpressionsInRange.toLocaleString(), resultLabel: "Engagement", resultValue: socialEngagement !== null ? socialEngagement.toLocaleString() : "—", rateLabel: "Followers", rateValue: socialFollowers !== null ? socialFollowers.toLocaleString() : "—" },
       ],
     };

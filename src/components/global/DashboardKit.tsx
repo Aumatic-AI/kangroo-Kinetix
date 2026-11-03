@@ -2,7 +2,7 @@ import React from "react";
 import { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** Shared visual primitives for every dashboard (root, Meta Ads, Outreach,
+/** Shared visual primitives for every dashboard (root, Meta Ads,
  * Social) — one Card/KpiTile/chart-color system so the four dashboards read
  * as one product instead of four one-off pages. Categorical series always
  * follow this fixed order (never cycled, never re-picked per chart) — it's

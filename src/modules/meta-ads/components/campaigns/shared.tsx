@@ -48,7 +48,7 @@ export function LevelChip({ level }: { level: "campaign" | "adset" | "ad" }) {
 /** A read-only label/value pair for a detail page's info grid — e.g.
  * Objective, Buying Type, Schedule. Matches the same small-caps-label +
  * medium-value convention already used for info panels elsewhere in the
- * app (e.g. the outreach Campaign Detail page's Field component). */
+ * app. */
 export function InfoItem({ label, value, truncate = true }: { label: string; value: ReactNode; truncate?: boolean }) {
   return (
     <div className="min-w-0">
@@ -226,7 +226,7 @@ export function flagEmoji(countryCode?: string): string {
 /** Reads the business's saved Advantage+ Audience preference — the one
  * business-level default the Launch/Add Ad Set forms pick up automatically,
  * per businesses.settings.meta_ads (jsonb, no dedicated settings UI yet —
- * same pattern as businesses.outreach_settings). */
+ * */
 export function useBusinessMetaAdsDefaults() {
   const supabase = createClient();
   return useQuery({

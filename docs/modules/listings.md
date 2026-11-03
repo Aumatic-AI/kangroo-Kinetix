@@ -7,7 +7,7 @@ A top-level module (`/listings`, one flat page like Settings — no secondary si
 
 ## The page
 - **Table** (10 per page, server-paginated): thumbnail, name with city beneath, category, status pill, last promoted ("Never" until content has been generated). Search by name/city/category; filter by status and category.
-- **Drawer on click** (same pattern as Outreach's leads drawer):
+- **Drawer on click**:
   - image gallery (all reference images, thumbnails to switch, graceful fallback for images that fail to load);
   - details: category, city, region/country/timezone (shown as "Not verified" until someone verifies them), location-check status, supported events;
   - rotation: position, last promoted, per-environment (Live / Testing) counts for promoted / social / LinkedIn / failed / published, and an **activate/deactivate switch** behind a `ConfirmModal`;

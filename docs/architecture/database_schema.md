@@ -1,6 +1,6 @@
 # Kinetix — Database Architecture & Data Flows
 
-This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the original **14-table core** (§1–§7, Meta Ads + Social Media + shared infrastructure) and the **Outreach schema** (§8, added later, independently evolving) — there's no single fixed table count worth quoting as a headline number, since the schema keeps growing as modules get built.
+This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the original **14-table core** (§1–§7, Meta Ads + Social Media + shared infrastructure) — there's no single fixed table count worth quoting as a headline number, since the schema keeps growing as modules get built.
 
 **Multi-tenant-shaped, single-tenant in practice:** the tenant entity is `businesses`, with a `business_users` membership table, but the deployment runs with exactly **one** `businesses` row. See `system_design.md` §3 for the auto-enroll trigger that makes this cost nothing operationally.
 
@@ -11,8 +11,8 @@ A few things are worth knowing up front, because they're the result of deliberat
 - **`meta_ad_creatives` uses flat generation-config columns (`duration`, `audio_style`, `video_style`, `language`, `character_type`, `voice_id`) and a Json `ad_script`/`media_urls`, not a consolidated `ad_copy`/`generation_inputs` shape.** An earlier draft of this doc proposed the consolidated version; it was deliberately not adopted because the working image/video generation Inngest jobs already read and write the flat shape, and consolidating it would mean rewriting a pipeline that already works, for no functional gain.
 - **`social_posts` is one row per platform, not one row per post.** Posting the same creative to Instagram and TikTok is two rows sharing `media_asset_id`, each with its own `connection_id`, `caption`, and `status` — this is what lets "Instagram published, TikTok failed" be tracked as two independent outcomes instead of being unrepresentable.
 - **Several tables carry column names from the original 2024 migration that predate this reconciliation** (`external_campaign_id` not `meta_campaign_id`, `account_kind` not `connection_type`, `access_token_ref`/`secret_ref` not `*_vault_ref`, `type` not `kind`). These were left as-is rather than renamed, since nothing was broken and renaming would be pure churn.
-- **No RAG, no vector DB, no Pinecone.** Outreach email drafting comes from direct context-window prompting — see `system_design.md` §4.
-- **`meta_ad_creatives` and `ad_performance_daily` are real, working code.** So is the entire Outreach schema in §8. Campaign Launch (paid Meta campaigns) and Meta Lead Capture are also real, working code — see `modules/meta_ads.md`. `ad_analysis_reports` and the competitor/self-ad analysis jobs that wrote to it were removed as an unused feature — see §5 below.
+- **No RAG, no vector DB, no Pinecone.** AI features use direct context-window prompting
+- **`meta_ad_creatives` and `ad_performance_daily` are real, working code.** Campaign Launch (paid Meta campaigns) and Meta Lead Capture are also real, working code — see `modules/meta_ads.md`. `ad_analysis_reports` and the competitor/self-ad analysis jobs that wrote to it were removed as an unused feature — see §5 below.
 
 ## 1. Core: Users & Businesses
 
@@ -48,8 +48,7 @@ erDiagram
         jsonb business_colors
         uuid logo_asset_id FK "media_assets"
         jsonb settings "incl. settings.meta_ads.advantage_audience_default"
-        jsonb services "array of {name, description} — shared across Outreach/Meta Ads/Social, see §8"
-        jsonb outreach_settings "daily_limit, timezone, days, send_window — see §8"
+        jsonb services "array of {name, description} — shared across Meta Ads/Social"
         boolean video_reference_enabled "added 20260803 — default false"
         text video_reference_male_url
         text video_reference_female_url
@@ -321,110 +320,9 @@ erDiagram
 
 One row = one platform: posting the same generated video to Instagram and TikTok creates **two** `social_posts` rows, sharing `media_asset_id` and `idea_prompt`, each with its own `connection_id`, `caption`, and `status` — see `modules/social_media.md`.
 
-## 8. Outreach — built, real (added after the original 14-table core)
+## 8. Outreach — removed
 
-Outreach's schema was built out fully and has kept evolving (7 migrations from `20260725000000_newsletter_outreach_schema.sql` through `20260731000000_outreach_send_window_24h.sql` — the first migration's filename predates a later module that was since removed entirely). See `modules/outreach.md` for the module's full architecture — this section is the schema reference only.
-
-```mermaid
-erDiagram
-    businesses ||--o{ outreach_lead_lists : "organizes into"
-    outreach_lead_lists ||--o{ outreach_leads : "contains"
-    outreach_lead_lists ||--o{ outreach_campaigns : "targets"
-    outreach_lead_lists ||--o{ outreach_scrape_jobs : "fed by"
-    outreach_campaigns ||--o{ outreach_campaign_leads : "tracks sends to"
-    outreach_leads ||--o{ outreach_campaign_leads : "targeted by"
-    outreach_campaigns ||--o{ email_events : "logs"
-
-    outreach_lead_lists {
-        uuid id PK
-        uuid business_id FK
-        text name
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    outreach_leads {
-        uuid id PK
-        uuid business_id FK
-        uuid list_id FK "nullable — ON DELETE SET NULL, deleting a list orphans leads rather than deleting them"
-        text first_name
-        text last_name
-        text email "UNIQUE per business_id"
-        text phone
-        text linkedin_url
-        text company
-        text city
-        text country
-        text source "scraped | manual | import"
-        text email_verification_status "unverified | verified | invalid | catch_all | risky"
-        lead_status status "new | contacted | replied | interested | not_interested | bounced | do_not_contact"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    outreach_campaigns {
-        uuid id PK
-        uuid business_id FK
-        uuid list_id FK "NOT NULL, no cascade — a list with campaigns can't be deleted"
-        text name
-        text goal
-        text tone
-        text message_brief
-        text service_type
-        text target_region
-        text cta_text
-        text cta_link
-        text status "draft | active | paused | completed | archived — see modules/outreach.md for the unified 6-value status derived from this"
-        text generated_subject
-        jsonb generated_body "{subject, body}"
-        jsonb revision_history
-        text external_campaign_id "the Instantly.ai campaign id, once created"
-        integer daily_limit "default 50"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    outreach_campaign_leads {
-        uuid id PK
-        uuid outreach_campaign_id FK
-        uuid lead_id FK
-        text status "queued | sent | failed"
-        timestamptz sent_at
-    }
-
-    outreach_scrape_jobs {
-        uuid id PK
-        uuid business_id FK
-        uuid list_id FK "ON DELETE CASCADE"
-        text niches
-        text location
-        integer max_results
-        integer total_scraped
-        integer valid_emails
-        integer invalid_emails
-        text apify_run_id
-        text status "queued | running | succeeded | failed | cancelled"
-        text error_message
-        timestamptz created_at
-    }
-
-    email_events {
-        uuid id PK
-        uuid business_id FK
-        uuid outreach_campaign_id FK "nullable"
-        text event_type
-        text provider_message_id
-        jsonb raw_data
-        timestamptz occurred_at
-    }
-```
-
-Notes on this schema, most relevant for anyone about to alter it:
-- **`outreach_campaign_leads` is deliberately per-campaign, not a global "already contacted" flag.** A lead can be queued again by a *different* campaign — its own `status` (on `outreach_leads`) is the general-purpose signal, while `outreach_campaign_leads.status` tracks this specific campaign's send outcome.
-- **`outreach_campaigns.list_id` has no cascade** (a list with campaigns pointing at it can't be deleted), while **`outreach_scrape_jobs.list_id` cascades** (deleting a list deletes its scrape-job history) — an intentional asymmetry, not an oversight.
-- **`email_events`** predates a later schema split — it was originally a shared table with a `channel` check constraint (`'newsletter' | 'outreach'`) and a `contact_id` column. The other module that once shared this table was removed entirely (see below), so in practice this table is outreach-only today, though the `channel` constraint may still literally allow the now-unused `'newsletter'` value — verify against `src/types/supabase.ts` before relying on an exact constraint shape here, and consider a follow-up migration to tighten the constraint to `'outreach'`-only.
-- **`businesses.services`** (`jsonb`, array of `{name, description}`) and **`businesses.outreach_settings`** (`jsonb` — `daily_limit`, `timezone`, `days`, `send_window: {from, to}`) were added specifically for Outreach but are shared/available to every module. `outreach_settings` currently defaults to a full-day send window (`00:00`–`23:59`) — an earlier default of business-hours-only (`09:00`–`18:00`) made a freshly-created campaign look "broken" (no visible send activity outside those hours) with no settings UI yet to explain or change it.
-- **Tables that existed briefly and were dropped**: `contact_categories` and `contacts` (replaced by `outreach_lead_lists`/`outreach_leads`), `outreach_campaign_contacts` (replaced by `outreach_campaign_leads`), plus a full set of tables belonging to a module that has since been removed from the product entirely (see the migration history below).
+The entire Outreach schema (`outreach_lead_lists`, `outreach_leads`, `outreach_campaigns`, `outreach_campaign_leads`, `outreach_campaign_lists`, `email_events`) and `businesses.outreach_settings` were dropped by `20261101000000_remove_outreach.sql`, along with the Outreach module, its API routes, Inngest send job and the Instantly.ai/MillionVerifier integrations. The history of how it was built is in the earlier migrations.
 
 ## 9. Row Level Security
 
@@ -504,14 +402,3 @@ Inngest jobs write with the service-role key, which bypasses RLS entirely — ex
   "status": "scheduled", "scheduled_at": "2026-07-20T10:00:00Z" }
 ```
 
-### C. Outreach Campaign Send
-
-```json
-// outreach_campaigns — after AI drafting, before approval
-{ "business_id": "b1…", "list_id": "l1…", "name": "Q3 Toronto Event Planners", "status": "draft",
-  "generated_subject": "Looking for the right space for your next event?",
-  "generated_body": { "subject": "...", "body": "Hi {{firstName}}, ..." } }
-
-// outreach_campaign_leads — after a send
-{ "outreach_campaign_id": "c1…", "lead_id": "ld1…", "status": "sent", "sent_at": "2026-07-22T14:00:00Z" }
-```

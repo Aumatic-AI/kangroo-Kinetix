@@ -28,10 +28,9 @@ Never redirect stderr into the types file (`... > src/types/supabase.ts 2>&1`) �
 
 Inngest dev server runs at `http://localhost:8288` (`INNGEST_DEV=1` in `.env.local` — must be unset/`0` in production, or every background job tries to reach a local server that doesn't exist). A new Inngest function must be added to the `functions` array in `src/services/inngest/functions.ts` or it never registers, even if `createFunction(...)` exists elsewhere. All cron scheduling is Inngest-side (declared on each `src/jobs/*.job.ts` function itself, triggered by Inngest's own scheduler hitting `/api/inngest`) — there is no `vercel.json` `crons` entry or `/api/cron` route; don't add one, an earlier no-op stub of both tripped Vercel Hobby-plan's daily-cron-jobs limit on deploy.
 
-`src/jobs/*.job.ts`, registered in `src/services/inngest/functions.ts` — the only 3 background jobs in the app:
+`src/jobs/*.job.ts`, registered in `src/services/inngest/functions.ts` — the only background jobs in the app:
 - `meta-ads-performance-sync.job.ts` — nightly cron, populates `ad_performance_daily`.
 - `social-scheduled-post-check.job.ts` — event-triggered once per scheduled post, not a recurring poll.
-- `src/services/inngest/outreach/send-campaign.ts` (event `outreach/send-campaign`) — sends one outreach campaign through Instantly.ai; fired on-demand from the Campaigns list.
 
 **Four other background jobs were deliberately removed — don't reintroduce any of them without being explicitly asked:**
 - A weekly self-ad-analysis job and an earlier competitor-analysis job, which fed AI-generated "market intelligence" into ad-generation prompts. Both jobs, the `ad_analysis_reports` table, and every prompt section reading it are gone — ad generation is grounded only in the business's own Settings context and the user's idea/brief now.
@@ -43,15 +42,15 @@ This file covers cross-cutting conventions only. For anything deeper, read the r
 - [`docs/index.md`](docs/index.md) — start here for an overview of the whole system.
 - [`docs/architecture/database_schema.md`](docs/architecture/database_schema.md) — every table, column, and relationship, verified against `supabase/migrations/`.
 - [`docs/architecture/system_design.md`](docs/architecture/system_design.md) — how Next.js, Supabase, and Inngest fit together, and the single-tenant-on-multi-tenant-schema model.
-- [`docs/architecture/content_automation.md`](docs/architecture/content_automation.md) — the content-automation schema (12 new tables), Testing/Live safeguards, rotation algorithm and publishing flow. Migration prepared but **not yet applied** to any project.
-- [`docs/modules/*.md`](docs/modules/) — one file per product module (Meta Ads, Social Media, Outreach, Listings), what's actually built.
+- [`docs/architecture/content_automation.md`](docs/architecture/content_automation.md) — the content-automation schema (12 new tables), Testing/Live safeguards, rotation algorithm and publishing flow. Migration applied to the linked project.
+- [`docs/modules/*.md`](docs/modules/) — one file per product module (Meta Ads, Social Media, Listings), what's actually built.
 - [`DESIGN.md`](DESIGN.md) (imported above, always in context) — the UI design system: tokens, component specs, and rules for building consistent UI.
 
 ## Architecture
 
-Kinetix is a single-tenant marketing-automation platform for one client (Kangrooo, a Canadian space and venue booking marketplace). It is a Next.js App Router app with several product "modules" (Meta Ads, Social Media, Outreach, Settings), navigated via a two-tier sidebar (`PrimarySidebar` = modules, `SecondarySidebar` = per-module tabs) driven by the URL's pathname prefix in `src/app/(app)/layout.tsx`.
+Kinetix is a single-tenant marketing-automation platform for one client (Kangrooo, a Canadian space and venue booking marketplace). It is a Next.js App Router app with several product "modules" (Meta Ads, Social Media, Settings), navigated via a two-tier sidebar (`PrimarySidebar` = modules, `SecondarySidebar` = per-module tabs) driven by the URL's pathname prefix in `src/app/(app)/layout.tsx`.
 
-**Meta Ads (temporarily hidden via `FEATURES.metaAds` in `src/config/features.ts` — nav, pages and root-dashboard data; flip to `true` to restore), Social Media, and Outreach have real functionality built**, plus **Listings** (`/listings`, a single-page module: the property inventory table with a detail drawer) — these are the only product modules in the app today.
+**Meta Ads (temporarily hidden via `FEATURES.metaAds` in `src/config/features.ts` — nav, pages and root-dashboard data; flip to `true` to restore), and Social Media have real functionality built**, plus **Listings** (`/listings`, a single-page module: the property inventory table with a detail drawer) — these are the only product modules in the app today.
 
 ### Module structure — always follow this split
 
@@ -91,13 +90,6 @@ The `campaigns`/`ad_sets`/`ads`/`leads` tables are a **pointer, not a mirror**: 
 
 **Leads has no webhook — `GET /api/meta-ads/leads` calls Meta live on every request instead** (see Background jobs above for why). It calls `LeadsService.syncFromMeta()` (upserts on `meta_lead_id`, never deletes) before reading `leads`, so any lead from an earlier sync stays in the table even if a later Graph API response omits it — reading right after syncing already reflects both sources, not just the latest call. If the live sync fails, the route degrades to whatever's already in `leads` rather than failing the page. "Sync now" (`POST /api/meta-ads/leads/sync`, same underlying service) forces another sync without leaving/reloading the page. No `META_APP_SECRET`/`META_WEBHOOK_VERIFY_TOKEN`/HMAC verification/dashboard subscription needed either way.
 
-### Outreach module — Instantly.ai and the unified status system
-
-Every Kinetix outreach campaign gets its **own dedicated Instantly.ai campaign** — never share one Instantly campaign across multiple Kinetix campaigns (a legacy bug this deliberately avoids). `src/services/instantly/client.ts` is the one Instantly API wrapper (`InstantlyService`); campaigns are created in Draft and must be explicitly activated.
-
-Same **pointer, not mirror** split as Meta Ads: our DB (`outreach_campaigns`, `outreach_leads`, `outreach_lead_lists`, `outreach_campaign_leads`) owns config and workflow state; Instantly owns live delivery/analytics, always fetched fresh via `/api/outreach/analytics`, never cached in our DB.
-
-**Never branch UI on `outreach_campaigns.status` or Instantly's raw numeric status directly** — always go through `resolveCampaignStatus()` in `src/modules/outreach/utils/campaign-status.ts`, the single merge point producing one of six values (`draft`, `ready`, `sending`, `sent`, `paused`, `no_recipients`). See `docs/modules/outreach.md` for what each means and drives it.
 
 ### Styling — a recurring gotcha
 

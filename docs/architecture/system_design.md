@@ -15,7 +15,6 @@ graph TD
     Jobs -- "Read/Write" --> Supabase
     Jobs -- "HTTP APIs" --> AI["OpenAI / Kie AI / ElevenLabs / AssemblyAI / Apify"]
     Jobs -- "Publish" --> Meta["Meta Graph API / Social Platforms"]
-    Jobs -- "Send" --> Instantly["Instantly.ai (Outreach email delivery)"]
 ```
 
 ## 2. Component Responsibilities
@@ -26,7 +25,7 @@ graph TD
 
 ### B. Next.js Backend (Server Actions / API Routes)
 - **Responsibility:** Secure operations only.
-- **Usage:** Used *only* for things the client cannot do securely — chiefly, dispatching background events to Inngest (`inngest.send()`, e.g. `meta-ads/generate-image`, `outreach/scrape-contacts`) and calling third-party APIs with server-only secrets (Meta Graph, Instantly, Upload-Post) that a browser could never hold safely.
+- **Usage:** Used *only* for things the client cannot do securely — chiefly, dispatching background events to Inngest (`inngest.send()`, e.g. `meta-ads/generate-image`) and calling third-party APIs with server-only secrets (Meta Graph, Upload-Post) that a browser could never hold safely.
 - **No inbound webhooks and no OAuth callbacks today.** Meta Ads' Leads previously used a real-time Lead Ads webhook; it was removed in favor of a scheduled background sync instead (see §2.D below and `modules/meta_ads.md`). Social Media never does OAuth itself — accounts are connected on Upload-Post's own dashboard (see `modules/social_media.md` §3). If either is ever added back, it belongs in this layer.
 
 ### C. Supabase (Database & Auth)
@@ -50,14 +49,11 @@ graph TD
 | Social post generation (image) | event | `social/generate-image` |
 | Social post generation (video) | event | `social/generate-video` |
 | Scheduled social post publish | event, one instance per scheduled post — not a recurring poll | `social/scheduled-post-created` |
-| Outreach lead scraping | event (triggered from Find Leads) | `outreach/scrape-contacts` |
-| Outreach campaign send | event (triggered from the Campaigns list, not a cron) | `outreach/send-campaign` |
 
 Only 2 of these are real crons (Meta Ads performance sync, daily) — everything else is either event-triggered on demand or (the scheduled social post publish) fired once per instance, never a recurring poll. Two previously-listed jobs no longer exist at all: a weekly self-ad-performance-analysis job (hourly cron checking a per-business Settings schedule via `shouldRunScheduledJob()`) was removed along with the "market intelligence"/"winning angle" it fed into ad-generation prompts, as an unused feature — see `database_schema.md` §5 and `modules/meta_ads.md` §1. A social/root dashboard analytics cache refresh and a Meta Ads leads sync (both every 5 minutes) were removed earlier still — see the Leads/dashboards note directly below.
 
 Every event payload carries `business_id` explicitly. Inngest functions run with the Supabase service-role key, which bypasses RLS entirely — scoping for background writes comes from the payload, never inferred from a session (there is no user session inside a background worker).
 
-The Outreach scrape job (`scrapeOutreachContacts`) reports its progress purely through `outreach_scrape_jobs.status` — earlier versions pushed realtime Supabase broadcasts to a global "jobs" widget on top of that, but a broadcast is a single unpersisted message with no replay: any WebSocket hiccup during the job's several-minute run silently and permanently lost the terminal "done" message, stranding the UI. That widget (and the whole global job-tracking store behind it) was removed — the Leads page now polls `outreach_scrape_jobs` directly (`useScrapeJobs`, see `modules/outreach.md`), the same page-scoped-polling pattern already used for Meta Ads/Social Media AI generation (`generationRefetchInterval` — see `modules/meta_ads.md` / `modules/social_media.md`). No global widget, no broadcast channel, one consistent pattern for every "something's generating/running in the background" case in the app.
 
 ### Leads and the dashboards call their slow third-party APIs live, on every page load — by deliberate choice
 
@@ -96,23 +92,22 @@ One code-level follow-up for whenever the migration actually happens (not part o
 
 ## 4. Intelligence: no RAG, no vector DB
 
-Every AI-facing feature in Kinetix (ad script/visual-prompt generation, outreach email drafting, social captions) works by direct context-window prompting: the relevant business context is assembled into a single prompt and sent to OpenAI in one call. Kinetix does not use Pinecone or any vector store anywhere. The legacy n8n pipeline used a Pinecone-backed RAG step for its competitor-analysis feature; that was deliberately not carried forward when this app was rebuilt, and the feature itself (competitor analysis, plus a related self-ad-analysis job) was later removed from Kinetix entirely as unused — see `database_schema.md` §5. The RAG-vs-single-prompt reasoning still holds for anything AI-facing this app does today: the data volumes involved are small enough (a business's own services/context, a handful of leads, one idea prompt) that retrieval isn't needed, and a single well-scoped prompt is simpler to build, debug, and reason about.
+Every AI-facing feature in Kinetix (ad script/visual-prompt generation, social captions) works by direct context-window prompting: the relevant business context is assembled into a single prompt and sent to OpenAI in one call. Kinetix does not use Pinecone or any vector store anywhere. The legacy n8n pipeline used a Pinecone-backed RAG step for its competitor-analysis feature; that was deliberately not carried forward when this app was rebuilt, and the feature itself (competitor analysis, plus a related self-ad-analysis job) was later removed from Kinetix entirely as unused — see `database_schema.md` §5. The RAG-vs-single-prompt reasoning still holds for anything AI-facing this app does today: the data volumes involved are small enough (a business's own services/context, a handful of leads, one idea prompt) that retrieval isn't needed, and a single well-scoped prompt is simpler to build, debug, and reason about.
 
 ## 5. Root Dashboard — cross-module rollup
 
 `/dashboard` (`src/modules/dashboard/`) is the app's landing page — `/` itself is a hard redirect to it (`src/app/page.tsx`), it isn't served at `/` directly. It's the only page that reads across all three product modules in one request, backed by a single `GET /api/dashboard?range=` handler that aggregates:
 
 - **Meta Ads:** active campaign count, `ad_performance_daily` spend/impressions/clicks for the selected range, `leads` table count.
-- **Outreach:** `OutreachCampaignsService.getCampaignsWithAnalytics()` (the same merge Outreach's own Dashboard and Campaigns page use), plus DB-only aggregates from `outreach_campaign_leads`/`outreach_leads`.
 - **Social:** `platform_connections` status, plus Upload-Post profile analytics/impressions called live on every request (see §2's note on Leads/dashboards calling their APIs live) — best-effort beyond that (a failed call degrades gracefully rather than failing the whole dashboard).
 
-Only two KPIs are genuine cross-module sums — **Total Leads** (Meta inbound + Outreach added) and **Total Reach** (Meta + Social impressions) — because those are the only concepts that are genuinely the same thing across modules. Everything else (spend, reply rate, followers) stays scoped to its own module; Outreach's "leads" (cold-scraped prospects) are never silently merged with Meta's "leads" (inbound Instant Form conversions) beyond that one explicitly-labeled combined KPI.
+**Total Reach** (Meta + Social impressions) is the one genuine cross-module sum. Everything else (spend, followers, leads) stays scoped to its own module.
 
 The page itself: a range switcher (7d/14d/30d/90d/All — `range=all` is a capped 180-day window, not a true earliest-row lookup), a KPI row, an acquisition funnel (Reach → Clicks → Leads), two trend charts (Leads by source, Reach by channel), three per-module trend cards linking out to that module's own Dashboard, and a channel comparison table. Current-state numbers (active campaigns, "sending now," followers) are live snapshots that don't rescope with the selected range — only the trend/summary numbers do.
 
 ## 6. Shared Pagination System
 
-Every list page across all three modules (Meta Ads: Campaigns, Reports, Ad Library, Leads; Social: Posts; Outreach: Leads, Campaigns) uses one shared pagination contract instead of each inventing its own:
+Every list page across all three modules (Meta Ads: Campaigns, Reports, Ad Library, Leads; Social: Posts) uses one shared pagination contract instead of each inventing its own:
 
 - **`src/lib/pagination.ts`** — the only two allowed page sizes, `PAGE_SIZE_COMPACT` (10, for tables and low-density grids) and `PAGE_SIZE_DENSE` (20, for denser card/thumbnail grids) — picked per page based on roughly how many items its layout shows per viewport, never a bespoke number. Plus three helpers: `paginationMeta(total, page, limit)` (returns `{ total, page, limit, totalPages }`, floored at 1 page), `rangeFor(page, limit)` (the `[from, to]` tuple for Supabase's `.range()`), and `paginateArray(items, page, limit)` (in-memory slicing for the one list that can't be paginated at the query level — see below).
 - **`src/components/ui/Pagination.tsx`** — the one Prev/1…N…Last/Next control every paginated page renders, with page-number condensation (always page 1 and the last page, plus current±1, collapsing any gap into a single "…").
@@ -125,8 +120,8 @@ Some hooks that back a *picker* rather than a *list page* deliberately stay unpa
 
 ## 7. Shared Dashboard UI Kit
 
-`src/components/global/DashboardKit.tsx` is the one file the Root Dashboard and all three module dashboards (Meta Ads, Outreach, Social) are built from, so the four read as one product instead of four one-off designs. It exports:
+`src/components/global/DashboardKit.tsx` is the one file the Root Dashboard and the module dashboards (Meta Ads, Social) are built from, so they read as one product instead of four one-off designs. It exports:
 - A fixed color system (`ACCENT` — purple/blue/green/amber/red, mapped to `DESIGN.md`'s tokens) and `CHART_SERIES`, a categorical color order that's never re-picked per chart (per the dataviz convention: color follows the entity, not its rank).
 - `chartTickInterval(pointCount, targetLabels = 7)` — scales a chart's x-axis label interval to the actual number of data points, so labels never overlap regardless of how long a selected date range is (replacing an earlier fixed-threshold approach that broke down for very long ranges).
 - Layout primitives: `Card`, `SectionTitle`, `KpiTile` (compact/tint/default variants), `EmptyState`.
-- A matching family of loading skeletons — `KpiRowSkeleton`, `AreaChartSkeleton`, `PieChartSkeleton`, `BarRowsSkeleton`, `ProportionalListSkeleton`, `TableSkeleton`, `ModuleCardSkeleton`, and more — each built on the real `Skeleton` primitive (`src/components/ui/skeleton.tsx`) and shaped to mirror its corresponding real component's exact layout, so nothing visibly reflows once real data arrives. The same principle extends beyond dashboards: every list/detail page in the app (including the three Meta Ads detail pages, Ad Library, and Outreach's Campaign Detail) follows the same rule — real static chrome (headers, breadcrumbs, known labels) renders immediately, and only the genuinely data-dependent parts shimmer.
+- A matching family of loading skeletons — `KpiRowSkeleton`, `AreaChartSkeleton`, `PieChartSkeleton`, `BarRowsSkeleton`, `ProportionalListSkeleton`, `TableSkeleton`, `ModuleCardSkeleton`, and more — each built on the real `Skeleton` primitive (`src/components/ui/skeleton.tsx`) and shaped to mirror its corresponding real component's exact layout, so nothing visibly reflows once real data arrives. The same principle extends beyond dashboards: every list/detail page in the app (including the three Meta Ads detail pages, and Ad Library) follows the same rule — real static chrome (headers, breadcrumbs, known labels) renders immediately, and only the genuinely data-dependent parts shimmer.

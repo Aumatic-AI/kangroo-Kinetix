@@ -7,7 +7,7 @@ const STAGE_COLOR = [ACCENT.blue.solid, ACCENT.purple.solid, ACCENT.green.solid]
 
 /** The whole business's top-of-funnel, in one glance: how many people saw
  * something (Meta + Social impressions), how many acted on an ad (Meta
- * clicks), how many became a lead (Meta inbound + Outreach added) — a plain
+ * clicks), how many became a lead (Meta inbound) — a plain
  * bar chart, not a funnel shape, since the stages here are what actually
  * matters, not the drop-off geometry. */
 export function AcquisitionFunnel({ stages }: { stages: RootDashboardData["funnel"] }) {

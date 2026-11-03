@@ -1,11 +1,10 @@
-import { LayoutGrid, Megaphone, Send, Share2 } from "lucide-react";
+import { LayoutGrid, Megaphone, Share2 } from "lucide-react";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { ACCENT, SectionTitle, Card } from "@/components/global/DashboardKit";
 import { RootDashboardData } from "../hooks/useDashboard";
 
 const CHANNEL_ICON: Record<string, { icon: typeof Megaphone; accent: { solid: string; tint: string } }> = {
   "Meta Ads": { icon: Megaphone, accent: ACCENT.purple },
-  Outreach: { icon: Send, accent: ACCENT.blue },
   Social: { icon: Share2, accent: ACCENT.green },
 };
 

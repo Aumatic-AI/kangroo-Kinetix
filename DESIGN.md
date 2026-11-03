@@ -25,11 +25,11 @@ All defined in `src/styles/globals.css` under `:root` (there is no separate dark
 ### Primary
 | Token | Value | Usage |
 |---|---|---|
-| `--color-primary` | `#7132f5` | Primary buttons, links, focus rings, active/selected state |
-| `--color-primary-hover` | `#5741d8` | Hover state of primary elements |
-| `--color-primary-active` | `#5b1ecf` | Pressed state |
-| `--color-primary-subtle` | `rgba(133, 91, 251, 0.16)` | Light tint background (selected row, active nav item) |
-| `--color-primary-border` | `#5741d8` | Border on primary-subtle surfaces |
+| `--color-primary` | `#000000` | Primary buttons, links, focus rings, active/selected state |
+| `--color-primary-hover` | `#262626` | Hover state of primary elements |
+| `--color-primary-active` | `#404040` | Pressed state |
+| `--color-primary-subtle` | `rgba(0, 0, 0, 0.08)` | Light tint background (selected row, active nav item) |
+| `--color-primary-border` | `#262626` | Border on primary-subtle surfaces |
 
 ### Neutral
 | Token | Value | Usage |

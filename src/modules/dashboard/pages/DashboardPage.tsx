@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Megaphone, Send, Share2 } from "lucide-react";
+import { Megaphone, Share2 } from "lucide-react";
 import { useRootDashboard, RootDashboardRange } from "../hooks/useDashboard";
 import { KpiRow } from "../components/KpiRow";
 import { AcquisitionFunnel } from "../components/AcquisitionFunnel";
@@ -51,7 +51,7 @@ export function DashboardPage() {
 
       {isLoading || !data ? (
         <>
-          <KpiRowSkeleton count={FEATURES.metaAds ? 8 : 6} cols="grid-cols-2 lg:grid-cols-4" compact />
+          <KpiRowSkeleton count={FEATURES.metaAds ? 6 : 4} cols="grid-cols-2 lg:grid-cols-4" compact />
 
           <Card>
             <SectionTitleSkeleton titleWidth="w-40" trailing />
@@ -69,9 +69,8 @@ export function DashboardPage() {
             </Card>
           </div>
 
-          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
             {FEATURES.metaAds && <ModuleCardSkeleton />}
-            <ModuleCardSkeleton />
             <ModuleCardSkeleton />
           </div>
 
@@ -95,7 +94,7 @@ export function DashboardPage() {
             <ReachTrend data={data.reachTrend} />
           </div>
 
-          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
             {FEATURES.metaAds && <ModuleTrendCard
               icon={Megaphone}
               title="Meta Ads"
@@ -106,16 +105,6 @@ export function DashboardPage() {
               secondary={data.moduleTrends.meta.secondary}
               data={data.moduleTrends.meta.data}
             />}
-            <ModuleTrendCard
-              icon={Send}
-              title="Outreach"
-              href={ROUTES.OUTREACH.DASHBOARD}
-              accent={ACCENT.blue}
-              headline={data.moduleTrends.outreach.headline}
-              headlineLabel={data.moduleTrends.outreach.headlineLabel}
-              secondary={data.moduleTrends.outreach.secondary}
-              data={data.moduleTrends.outreach.data}
-            />
             <ModuleTrendCard
               icon={Share2}
               title="Social Media"

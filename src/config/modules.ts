@@ -14,11 +14,6 @@ export const MODULES: Record<
     description: "AI-powered ad generation and management",
     color: "#1877F2",
   },
-  outreach: {
-    name: "Outreach",
-    description: "Automate personalized cold emails",
-    color: "#3182CE",
-  },
   social: {
     name: "Social Media",
     description: "Generate and schedule social content",

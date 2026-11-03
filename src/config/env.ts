@@ -19,9 +19,6 @@ const envSchema = z.object({
   FFMPEG_API_KEY: z.string().optional(),
   UPLOAD_POST_PROFILE: z.string().optional(),
 
-  // Outreach (lead verification & cold email sending)
-  MILLIONVERIFIER_API_KEY: z.string().optional(),
-  INSTANTLY_API_KEY: z.string().optional(),
 
   // Meta Graph API — Ads
   META_ACCESS_TOKEN: z.string().optional(),
@@ -62,8 +59,6 @@ const _env = envSchema.safeParse({
   FFMPEG_API_KEY: process.env.FFMPEG_API_KEY,
   UPLOAD_POST_PROFILE: process.env.UPLOAD_POST_PROFILE,
 
-  MILLIONVERIFIER_API_KEY: process.env.MILLIONVERIFIER_API_KEY,
-  INSTANTLY_API_KEY: process.env.INSTANTLY_API_KEY,
 
   META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
   META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,

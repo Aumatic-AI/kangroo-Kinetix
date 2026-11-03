@@ -9,17 +9,14 @@ export interface RootDashboardData {
     totalReach: number;
     metaActiveCampaigns: number;
     metaSpendCents: number;
-    outreachReplyRate: number;
-    outreachSendingNow: number;
     socialFollowers: number | null;
     socialEngagement: number | null;
   };
   funnel: { stage: string; value: number }[];
-  leadsBySource: { date: string; meta: number; outreach: number }[];
+  leadsBySource: { date: string; meta: number }[];
   reachTrend: { date: string; meta: number; social: number }[];
   moduleTrends: {
     meta: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
-    outreach: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
     social: { headline: string; headlineLabel: string; secondary: string; data: { date: string; value: number }[] };
   };
   channelTable: { channel: string; primaryLabel: string; primaryValue: string; resultLabel: string; resultValue: string; rateLabel: string; rateValue: string }[];
