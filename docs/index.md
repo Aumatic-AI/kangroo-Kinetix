@@ -2,7 +2,7 @@
 
 Welcome to the **Kinetix** documentation. Kinetix is a single-tenant Marketing Automation Platform, consolidating several previously-separate n8n + Next.js projects built for one client into one codebase, one Postgres schema, and one background-job runner (Inngest replacing n8n). The schema is multi-tenant-shaped (a `businesses` + `business_users` model) but runs with exactly **one** `businesses` row today — there is one client. A second client later needs new rows, not a new schema (see `architecture/system_design.md` §3).
 
-**Built and active today:** Meta Ads, Social Media, Outreach, plus a cross-module Root Dashboard and a Settings page.
+**Built and active today:** Meta Ads, Social Media, Outreach, Listings (the property inventory), plus a cross-module Root Dashboard and a Settings page.
 
 1. **Root Dashboard** (`/dashboard`) — a cross-module rollup: combined leads/reach KPIs, an acquisition funnel, per-module trend cards, and a channel comparison table. See `architecture/system_design.md` §5. *(active)*
 2. **Meta Ads Automation** (`/meta-ads`) — AI-driven generation, launching, and analysis of Meta (Facebook/Instagram) advertising campaigns. *(active)*
@@ -28,10 +28,12 @@ To understand the system deeply without scanning source code, refer to the follo
 
 ### 1. Architecture
 - [`architecture/database_schema.md`](architecture/database_schema.md) — Every table and relationship, verified column-by-column against `supabase/migrations/`.
+- [`architecture/content_automation.md`](architecture/content_automation.md) — Kangrooo content automation: the 12 new tables, Testing-vs-Live safeguards, the property rotation algorithm, publishing flow, RLS matrix. *(migration prepared, not yet applied)*
 - [`architecture/system_design.md`](architecture/system_design.md) — How Next.js, Supabase, and Inngest communicate securely, how the multi-tenant-shaped schema runs single-tenant today, the Root Dashboard, and the shared pagination/dashboard-skeleton systems every module reuses.
 
 ### 2. Core Modules
 - [`modules/meta_ads.md`](modules/meta_ads.md) — Ad creative generation, Campaign Launch (real Meta Graph API objects), the Dashboard/Reports/Ad Library/Leads pages, and Instant Form lead capture.
+- [`modules/listings.md`](modules/listings.md) — The property inventory (`/listings`): searchable table, image/detail drawer, rotation status and activate/deactivate.
 - [`modules/social_media.md`](modules/social_media.md) — AI content generation, per-platform preview, scheduling, and publishing via Upload-Post.
 - [`modules/outreach.md`](modules/outreach.md) — Lead lists, scraping, AI campaign drafting, and Instantly.ai sending.
 - [`modules/settings.md`](modules/settings.md) — The one Settings page: business identity/voice/services, and every module's automation defaults.

@@ -36,10 +36,12 @@ export const socialScheduledPostCheck = inngest.createFunction(
     const MAX_ATTEMPTS = 10; // 30s apart => up to 5 minutes of checking after the due time
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const resolved = await step.run(`check-${attempt}`, async () => {
-        const { data: post } = await supabase.from("social_posts").select("status").eq("id", socialPostId).single();
+        const { data: post } = await supabase.from("social_posts").select("status, property_content_id").eq("id", socialPostId).single();
         if (!post || (post.status !== "scheduled" && post.status !== "publishing")) {
           return true; // already resolved, cancelled, or retried elsewhere — nothing left to do
         }
+        // Automation posts are reconciled by the content-automation worker, never here.
+        if (post.property_content_id !== null) return true;
 
         const status = jobId
           ? await UploadPostService.getUploadStatus({ jobId })

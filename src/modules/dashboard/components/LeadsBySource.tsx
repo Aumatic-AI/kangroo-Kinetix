@@ -1,6 +1,7 @@
 import { Users } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ACCENT, CHART_TOOLTIP_STYLE, SectionTitle, Card, EmptyState, chartTickInterval } from "@/components/global/DashboardKit";
+import { FEATURES } from "@/config/features";
 import { RootDashboardData } from "../hooks/useDashboard";
 
 function formatShortDate(iso: string): string {
@@ -28,7 +29,7 @@ export function LeadsBySource({ data }: { data: RootDashboardData["leadsBySource
               <YAxis hide />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "var(--color-surface)" }} labelFormatter={(v) => formatShortDate(v as string)} />
               <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
-              <Bar dataKey="meta" name="Meta Ads" stackId="leads" fill={ACCENT.purple.solid} radius={[0, 0, 0, 0]} maxBarSize={28} />
+              {FEATURES.metaAds && <Bar dataKey="meta" name="Meta Ads" stackId="leads" fill={ACCENT.purple.solid} radius={[0, 0, 0, 0]} maxBarSize={28} />}
               <Bar dataKey="outreach" name="Outreach" stackId="leads" fill={ACCENT.blue.solid} radius={[4, 4, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>

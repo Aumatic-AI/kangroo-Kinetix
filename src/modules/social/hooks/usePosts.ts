@@ -36,6 +36,9 @@ export function useSocialPosts() {
     queryFn: async () => {
       const { data, error } = await (supabase.from("social_posts") as any)
         .select("id, status, format, idea_prompt, caption, title, media_asset_id, published_at, scheduled_at, created_at, generation_inputs, platform_connections(platform, display_name, metadata), media_assets(type, metadata)")
+        // Content-automation posts (property_content_id set) live in the
+        // automation gallery, never in the manual Social module.
+        .is("property_content_id", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];

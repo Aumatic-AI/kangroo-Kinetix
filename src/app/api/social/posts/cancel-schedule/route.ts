@@ -18,10 +18,13 @@ export async function POST(request: Request) {
 
     const { data: posts } = await supabase
       .from("social_posts")
-      .select("id, status, upload_post_job_id")
+      .select("id, status, upload_post_job_id, property_content_id")
       .in("id", body.socialPostIds);
 
     if (!posts || !posts.length) throw new Error("Posts not found");
+    if (posts.some((p) => p.property_content_id !== null)) {
+      return NextResponse.json({ error: "Automation posts are not scheduled on Upload-Post and cannot be cancelled here." }, { status: 409 });
+    }
 
     for (const post of posts) {
       if (post.status !== "scheduled") continue;

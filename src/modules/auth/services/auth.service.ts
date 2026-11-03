@@ -1,13 +1,23 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/services/logger/logger';
 
+// Public signup is disabled; the single account is provisioned by
+// scripts/create-admin-user.mjs. A bare username (no "@") maps to this domain.
+const USERNAME_EMAIL_DOMAIN = 'kangrooo.com';
+
+function toEmail(identifier: string) {
+  const v = identifier.trim().toLowerCase();
+  return v.includes('@') ? v : `${v}@${USERNAME_EMAIL_DOMAIN}`;
+}
+
 export class AuthService {
   /**
    * Securely authenticates a user using their email and password.
    * Note: This must be called with a Client-Side Supabase instance to automatically 
    * set browser cookies for Next.js Middleware parsing.
    */
-  async login(supabase: SupabaseClient, email: string, password: string) {
+  async login(supabase: SupabaseClient, identifier: string, password: string) {
+    const email = toEmail(identifier);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -23,38 +33,6 @@ export class AuthService {
       return { success: true, data };
     } catch (error: any) {
       logger.error('Unexpected error during login', { error: error.message });
-      return { success: false, error: 'An unexpected error occurred. Please try again.' };
-    }
-  }
-
-  /**
-   * Creates a new account. Profile creation and enrollment into the
-   * single business are handled automatically by database triggers
-   * (on_auth_user_created, on_profile_created_join_business) — nothing
-   * else needs to happen here.
-   */
-  async signUp(supabase: SupabaseClient, email: string, password: string, fullName: string) {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName },
-        },
-      });
-
-      if (error) {
-        logger.warn('Sign up attempt failed', { error: error.message, email });
-        return { success: false, error: error.message };
-      }
-
-      // If email confirmation is required, Supabase returns a user but no session.
-      const needsEmailConfirmation = !data.session;
-
-      logger.info('User successfully signed up', { userId: data.user?.id, needsEmailConfirmation });
-      return { success: true, data, needsEmailConfirmation };
-    } catch (error: any) {
-      logger.error('Unexpected error during sign up', { error: error.message });
       return { success: false, error: 'An unexpected error occurred. Please try again.' };
     }
   }

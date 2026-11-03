@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createClient } from "@/lib/supabase/client";
@@ -60,13 +59,14 @@ export function LoginPage() {
         )}
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="email" className="text-sm font-medium text-text">Email address</label>
+          <label htmlFor="email" className="text-sm font-medium text-text">Email or username</label>
           <Input
             id="email"
-            type="email"
+            type="text"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder="kangrooo"
             required
             disabled={isLoading}
           />
@@ -91,12 +91,6 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <p className="text-center text-sm text-muted">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-text font-medium hover:underline">
-          Sign up
-        </Link>
-      </p>
     </div>
   );
 }

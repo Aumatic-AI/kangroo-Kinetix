@@ -15,10 +15,18 @@ export async function POST(request: Request) {
 
     const { data: posts } = await supabase
       .from("social_posts")
-      .select("id, business_id, format, status, generation_inputs, connection_id, platform_connections(platform)")
+      .select("id, business_id, format, status, generation_inputs, connection_id, property_content_id, environment, platform_connections(platform)")
       .in("id", body.socialPostIds);
 
     if (!posts || !posts.length) throw new Error("Posts not found");
+    // Automation posts retry only through /api/content/posts/retry-publish,
+    // which runs the same eligibility checks as the publishing worker.
+    if (posts.some((p) => p.property_content_id !== null || p.environment !== null)) {
+      return NextResponse.json(
+        { error: "Automation posts cannot be retried here. Use the automation gallery's retry." },
+        { status: 409 },
+      );
+    }
     if (posts.some((p) => p.status !== "failed")) {
       return NextResponse.json({ error: "Only failed posts can be retried" }, { status: 400 });
     }

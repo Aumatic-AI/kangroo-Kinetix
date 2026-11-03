@@ -24,6 +24,11 @@ export const MODULES: Record<
     description: "Generate and schedule social content",
     color: "#DD6B20",
   },
+  listings: {
+    name: "Listings",
+    description: "The properties and venues Kangrooo promotes",
+    color: "var(--color-primary)",
+  },
   settings: {
     name: "Settings",
     description: "Manage your Kinetix workspace",

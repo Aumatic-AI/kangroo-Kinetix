@@ -19,6 +19,7 @@ import {
   TableSkeleton,
 } from "@/components/global/DashboardKit";
 import { ROUTES } from "@/config/routes";
+import { FEATURES } from "@/config/features";
 
 const RANGES: { value: RootDashboardRange; label: string }[] = [
   { value: "7d", label: "7 days" },
@@ -50,7 +51,7 @@ export function DashboardPage() {
 
       {isLoading || !data ? (
         <>
-          <KpiRowSkeleton count={8} cols="grid-cols-2 lg:grid-cols-4" compact />
+          <KpiRowSkeleton count={FEATURES.metaAds ? 8 : 6} cols="grid-cols-2 lg:grid-cols-4" compact />
 
           <Card>
             <SectionTitleSkeleton titleWidth="w-40" trailing />
@@ -68,8 +69,8 @@ export function DashboardPage() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <ModuleCardSkeleton />
+          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+            {FEATURES.metaAds && <ModuleCardSkeleton />}
             <ModuleCardSkeleton />
             <ModuleCardSkeleton />
           </div>
@@ -94,8 +95,8 @@ export function DashboardPage() {
             <ReachTrend data={data.reachTrend} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <ModuleTrendCard
+          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+            {FEATURES.metaAds && <ModuleTrendCard
               icon={Megaphone}
               title="Meta Ads"
               href={ROUTES.META_ADS.DASHBOARD}
@@ -104,7 +105,7 @@ export function DashboardPage() {
               headlineLabel={data.moduleTrends.meta.headlineLabel}
               secondary={data.moduleTrends.meta.secondary}
               data={data.moduleTrends.meta.data}
-            />
+            />}
             <ModuleTrendCard
               icon={Send}
               title="Outreach"

@@ -8,10 +8,10 @@ interface PrimarySidebarProps {
 }
 
 export function PrimarySidebar({ currentModule, hasSecondary }: PrimarySidebarProps) {
-  // Dashboard and Settings both have no secondary sidebar, so the primary
+  // Dashboard, Listings and Settings have no secondary sidebar, so the primary
   // one stays permanently expanded (full labels visible) instead of the
   // icon-only, hover-to-expand behavior every other module uses.
-  const isExpanded = currentModule === "dashboard" || currentModule === "settings";
+  const isExpanded = currentModule === "dashboard" || currentModule === "listings" || currentModule === "settings";
 
   return (
     <>

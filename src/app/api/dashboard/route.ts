@@ -5,6 +5,7 @@ import { Database } from "@/types/supabase";
 import { MetaAdsService } from "@/modules/meta-ads/services/meta-ads.service";
 import { OutreachCampaignsService } from "@/modules/outreach/services/outreach.service";
 import { env } from "@/config/env";
+import { FEATURES } from "@/config/features";
 import { UploadPostService, SUPPORTED_UPLOAD_POST_PLATFORMS, type UploadPostProfileAnalytics } from "@/services/upload-post";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +95,8 @@ export async function GET(request: NextRequest) {
     const since = new Date(Date.now() - rangeDays * 86_400_000).toISOString();
     const sinceDate = since.slice(0, 10);
     const days = dayRange(rangeDays);
+    // Meta Ads temporarily hidden (src/config/features.ts): treat its data as absent.
+    const metaOn = FEATURES.metaAds;
 
     const [
       { count: metaActiveCampaigns },
@@ -114,9 +117,9 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Meta — spend/impressions/clicks in range, day by day.
-    const metaSpendCents = (spendRows || []).reduce((s, r) => s + (r.spend_cents || 0), 0);
-    const metaClicks = (spendRows || []).reduce((s, r) => s + (r.clicks || 0), 0);
-    const metaImpressions = (spendRows || []).reduce((s, r) => s + (r.impressions || 0), 0);
+    const metaSpendCents = (metaOn ? spendRows || [] : []).reduce((s, r) => s + (r.spend_cents || 0), 0);
+    const metaClicks = (metaOn ? spendRows || [] : []).reduce((s, r) => s + (r.clicks || 0), 0);
+    const metaImpressions = (metaOn ? spendRows || [] : []).reduce((s, r) => s + (r.impressions || 0), 0);
     const spendByDay = new Map<string, number>();
     const impressionsByDay = new Map<string, number>();
     for (const r of spendRows || []) {
@@ -157,7 +160,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Leads by source — the one combined chart, both sides real DB rows in range.
-    const metaLeadsByDay = countByDay((metaLeadRows || []).map((r) => r.created_at), days);
+    const metaLeadsByDay = countByDay((metaOn ? metaLeadRows || [] : []).map((r) => r.created_at), days);
     const outreachLeadsByDay = countByDay((outreachLeadRows || []).map((r) => r.created_at), days);
     const leadsBySource = days.map((date, i) => ({ date, meta: metaLeadsByDay[i].value, outreach: outreachLeadsByDay[i].value }));
     const metaLeadsInRange = metaLeadsByDay.reduce((s, d) => s + d.value, 0);
@@ -208,7 +211,7 @@ export async function GET(request: NextRequest) {
       kpis: {
         totalLeads,
         totalReach,
-        metaActiveCampaigns: metaActiveCampaigns || 0,
+        metaActiveCampaigns: metaOn ? metaActiveCampaigns || 0 : 0,
         metaSpendCents,
         outreachReplyRate,
         outreachSendingNow,
@@ -217,7 +220,7 @@ export async function GET(request: NextRequest) {
       },
       funnel: [
         { stage: "Reach", value: totalReach },
-        { stage: "Clicks", value: metaClicks },
+        ...(metaOn ? [{ stage: "Clicks", value: metaClicks }] : []),
         { stage: "Leads", value: totalLeads },
       ],
       leadsBySource,
@@ -233,7 +236,7 @@ export async function GET(request: NextRequest) {
         },
       },
       channelTable: [
-        { channel: "Meta Ads", primaryLabel: "Spend", primaryValue: fmtCents(metaSpendCents), resultLabel: "Leads", resultValue: metaLeadsInRange.toLocaleString(), rateLabel: "All-time leads", rateValue: (metaLeadsAllTime || 0).toLocaleString() },
+        ...(!metaOn ? [] : [{ channel: "Meta Ads", primaryLabel: "Spend", primaryValue: fmtCents(metaSpendCents), resultLabel: "Leads", resultValue: metaLeadsInRange.toLocaleString(), rateLabel: "All-time leads", rateValue: (metaLeadsAllTime || 0).toLocaleString() }]),
         { channel: "Outreach", primaryLabel: "Sent", primaryValue: outreachSentInRange.toLocaleString(), resultLabel: "Leads added", resultValue: outreachLeadsInRange.toLocaleString(), rateLabel: "Reply rate", rateValue: `${outreachReplyRate}%` },
         { channel: "Social", primaryLabel: "Impressions", primaryValue: socialImpressionsInRange.toLocaleString(), resultLabel: "Engagement", resultValue: socialEngagement !== null ? socialEngagement.toLocaleString() : "—", rateLabel: "Followers", rateValue: socialFollowers !== null ? socialFollowers.toLocaleString() : "—" },
       ],

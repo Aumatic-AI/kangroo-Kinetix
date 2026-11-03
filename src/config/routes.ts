@@ -1,7 +1,6 @@
 export const ROUTES = {
   AUTH: {
     LOGIN: "/login",
-    SIGNUP: "/signup",
   },
   DASHBOARD: {
     HOME: "/dashboard",
@@ -32,6 +31,9 @@ export const ROUTES = {
     POSTS: "/social/posts",
     POSTS_PUBLISH: "/social/posts/publish",
     PUBLISHED: "/social/published",
+  },
+  LISTINGS: {
+    ROOT: "/listings",
   },
   SETTINGS: {
     ROOT: "/settings",

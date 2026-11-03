@@ -19,14 +19,26 @@ function authHeader(): Record<string, string> {
   return { Authorization: `Apikey ${apiKey()}` };
 }
 
+/** An Upload-Post response that was received but was an error. Carries the
+ * HTTP status so a caller can tell a definite rejection (4xx — the request was
+ * refused, nothing was published) from a server fault (5xx — outcome unknown).
+ * A plain `fetch` rejection (network drop / timeout) is NOT this class: the
+ * request may or may not have landed. */
+export class UploadPostHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "UploadPostHttpError";
+  }
+}
+
 async function parseOrThrow(res: Response, label: string) {
   const data = await res.json().catch(() => ({}));
   // 202 (scheduled) is a success case even though it's not res.ok's 2xx-only view in some runtimes.
   if (!res.ok && res.status !== 202) {
-    throw new Error(data?.message || data?.error || `Upload-Post ${label} failed (${res.status})`);
+    throw new UploadPostHttpError(data?.message || data?.error || `Upload-Post ${label} failed (${res.status})`, res.status);
   }
   if (data?.success === false) {
-    throw new Error(data?.message || data?.error || `Upload-Post ${label} failed`);
+    throw new UploadPostHttpError(data?.message || data?.error || `Upload-Post ${label} failed`, res.status);
   }
   return data;
 }

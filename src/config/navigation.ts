@@ -9,11 +9,13 @@ import {
   Link,
   PlayCircle,
   FileText,
+  Building2,
 } from "lucide-react";
 import { NavItem, ProductModule } from "@/types";
 import { ROUTES } from "./routes";
+import { FEATURES } from "./features";
 
-export const PRIMARY_NAV_ITEMS: NavItem[] = [
+export const PRIMARY_NAV_ITEMS: NavItem[] = ([
   {
     id: "dashboard",
     label: "Dashboard",
@@ -36,6 +38,13 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = [
     module: "social",
   },
   {
+    id: "listings",
+    label: "Listings",
+    href: ROUTES.LISTINGS.ROOT,
+    icon: Building2,
+    module: "listings",
+  },
+  {
     id: "outreach",
     label: "Outreach",
     href: ROUTES.OUTREACH.DASHBOARD,
@@ -49,7 +58,7 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = [
     icon: Settings,
     module: "settings",
   },
-];
+] as NavItem[]).filter((item) => FEATURES.metaAds || item.module !== "metaAds");
 
 export const SECONDARY_NAV_ITEMS: Record<
   ProductModule,
@@ -139,4 +148,6 @@ export const SECONDARY_NAV_ITEMS: Record<
   // sidebar. SecondarySidebar already renders nothing when its module's
   // list is empty (same as "dashboard").
   settings: [],
+  // Listings is likewise one flat page: the table, with a drawer for detail.
+  listings: [],
 };

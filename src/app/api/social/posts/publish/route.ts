@@ -32,10 +32,21 @@ export async function POST(request: Request) {
 
     const { data: posts } = await supabase
       .from("social_posts")
-      .select("id, caption, title, media_asset_id, connection_id, platform_connections(platform, metadata)")
+      .select("id, caption, title, media_asset_id, connection_id, property_content_id, environment, platform_connections(platform, metadata)")
       .in("id", body.socialPostIds);
 
     if (!posts || !posts.length) throw new Error("Posts not found");
+
+    // Automation posts are published ONLY by the content-automation worker,
+    // which re-checks mode / property / revision / connection / idempotency.
+    // Refuse before any Upload-Post call — a DB CHECK alone would reject the
+    // status update only after the post had already gone out.
+    if (posts.some((p) => p.property_content_id !== null || p.environment !== null)) {
+      return NextResponse.json(
+        { error: "Automation posts cannot be published manually. They are published automatically when Live automation is enabled." },
+        { status: 409 },
+      );
+    }
 
     const results: { id: string; success: boolean; scheduled?: boolean; error?: string }[] = [];
 

@@ -1,6 +1,7 @@
 import { TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ACCENT, CHART_TOOLTIP_STYLE, SectionTitle, Card, EmptyState, chartTickInterval } from "@/components/global/DashboardKit";
+import { FEATURES } from "@/config/features";
 import { RootDashboardData } from "../hooks/useDashboard";
 
 function formatShortDate(iso: string): string {
@@ -17,7 +18,7 @@ export function ReachTrend({ data }: { data: RootDashboardData["reachTrend"] }) 
 
   return (
     <Card>
-      <SectionTitle icon={TrendingUp} accent={ACCENT.blue} title="Total Reach" trailing={<span className="text-xs text-muted">Meta + Social</span>} />
+      <SectionTitle icon={TrendingUp} accent={ACCENT.blue} title="Total Reach" trailing={<span className="text-xs text-muted">{FEATURES.metaAds ? "Meta + Social" : "Social"}</span>} />
       {!total ? (
         <EmptyState message="No reach in the selected range yet." />
       ) : (
@@ -28,7 +29,7 @@ export function ReachTrend({ data }: { data: RootDashboardData["reachTrend"] }) 
               <YAxis hide />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }} labelFormatter={(v) => formatShortDate(v as string)} />
               <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
-              <Area type="monotone" dataKey="meta" name="Meta Ads" stackId="reach" stroke={ACCENT.purple.solid} fill={ACCENT.purple.solid} fillOpacity={0.5} strokeWidth={2} />
+              {FEATURES.metaAds && <Area type="monotone" dataKey="meta" name="Meta Ads" stackId="reach" stroke={ACCENT.purple.solid} fill={ACCENT.purple.solid} fillOpacity={0.5} strokeWidth={2} />}
               <Area type="monotone" dataKey="social" name="Social" stackId="reach" stroke={ACCENT.green.solid} fill={ACCENT.green.solid} fillOpacity={0.5} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>

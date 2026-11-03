@@ -43,14 +43,15 @@ This file covers cross-cutting conventions only. For anything deeper, read the r
 - [`docs/index.md`](docs/index.md) — start here for an overview of the whole system.
 - [`docs/architecture/database_schema.md`](docs/architecture/database_schema.md) — every table, column, and relationship, verified against `supabase/migrations/`.
 - [`docs/architecture/system_design.md`](docs/architecture/system_design.md) — how Next.js, Supabase, and Inngest fit together, and the single-tenant-on-multi-tenant-schema model.
-- [`docs/modules/*.md`](docs/modules/) — one file per product module (Meta Ads, Social Media, Outreach), what's actually built.
+- [`docs/architecture/content_automation.md`](docs/architecture/content_automation.md) — the content-automation schema (12 new tables), Testing/Live safeguards, rotation algorithm and publishing flow. Migration prepared but **not yet applied** to any project.
+- [`docs/modules/*.md`](docs/modules/) — one file per product module (Meta Ads, Social Media, Outreach, Listings), what's actually built.
 - [`DESIGN.md`](DESIGN.md) (imported above, always in context) — the UI design system: tokens, component specs, and rules for building consistent UI.
 
 ## Architecture
 
 Kinetix is a single-tenant marketing-automation platform for one client (Kangrooo, a Canadian space and venue booking marketplace). It is a Next.js App Router app with several product "modules" (Meta Ads, Social Media, Outreach, Settings), navigated via a two-tier sidebar (`PrimarySidebar` = modules, `SecondarySidebar` = per-module tabs) driven by the URL's pathname prefix in `src/app/(app)/layout.tsx`.
 
-**Meta Ads, Social Media, and Outreach have real functionality built** — these are the only three product modules in the app today.
+**Meta Ads (temporarily hidden via `FEATURES.metaAds` in `src/config/features.ts` — nav, pages and root-dashboard data; flip to `true` to restore), Social Media, and Outreach have real functionality built**, plus **Listings** (`/listings`, a single-page module: the property inventory table with a detail drawer) — these are the only product modules in the app today.
 
 ### Module structure — always follow this split
 
@@ -62,7 +63,11 @@ Kinetix is a single-tenant marketing-automation platform for one client (Kangroo
 
 ### Single-tenant assumption
 
-There is no per-user auth gating (no `middleware.ts`) and almost every API route/service resolves "the business" via `supabase.from("businesses").limit(1).single()` rather than deriving `business_id` from a session. This is intentional for the current one-client scope, not a bug to "fix" by adding multi-tenant plumbing unless explicitly asked.
+Page routes are gated by Supabase Auth in `src/proxy.ts` (Next 16's middleware: no session → `/login`), but `/api/*` routes are **not** gated, and almost every API route/service resolves "the business" via `supabase.from("businesses").limit(1).single()` rather than deriving `business_id` from a session. This is intentional for the current one-client scope, not a bug to "fix" by adding multi-tenant plumbing unless explicitly asked.
+
+### Auth
+
+Supabase email/password sign-in only (`src/modules/auth`). **There is no public signup** — the page, `signUp()`, and `enable_signup` in `supabase/config.toml` are removed/off (also disable "Allow new users to sign up" in the hosted dashboard). The single login is provisioned with `ADMIN_PASSWORD=... node --env-file=.env.local scripts/create-admin-user.mjs [username]`; a bare username maps to `<username>@kangrooo.com` in `auth.service.ts`. Don't re-add a signup flow unless asked.
 
 ### Supabase client conventions
 

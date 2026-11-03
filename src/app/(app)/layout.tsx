@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (pathname.startsWith("/meta-ads")) currentModule = "metaAds";
   else if (pathname.startsWith("/outreach")) currentModule = "outreach";
   else if (pathname.startsWith("/social")) currentModule = "social";
+  else if (pathname.startsWith("/listings")) currentModule = "listings";
   else if (pathname.startsWith("/settings")) currentModule = "settings";
 
   // AI Ad Studio is a full-bleed chat surface — it manages its own internal

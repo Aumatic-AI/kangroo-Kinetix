@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { env } from '@/config';
+import { FEATURES } from '@/config/features';
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -32,7 +33,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup');
+  const isAuthRoute = request.nextUrl.pathname.startsWith('/login');
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
 
   // Protect all non-auth and non-API routes if the user is not logged in
@@ -42,7 +43,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If a user is already logged in, prevent them from accessing the login/signup pages
+  // Meta Ads is temporarily hidden (see src/config/features.ts) — send its pages to the dashboard.
+  if (!FEATURES.metaAds && request.nextUrl.pathname.startsWith('/meta-ads')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/dashboard';
+    return NextResponse.redirect(url);
+  }
+
+  // If a user is already logged in, prevent them from accessing the login page
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
