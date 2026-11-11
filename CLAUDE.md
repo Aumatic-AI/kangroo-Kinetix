@@ -29,12 +29,12 @@ Never redirect stderr into the types file (`... > src/types/supabase.ts 2>&1`) �
 Inngest dev server runs at `http://localhost:8288` (`INNGEST_DEV=1` in `.env.local` — must be unset/`0` in production, or every background job tries to reach a local server that doesn't exist). A new Inngest function must be added to the `functions` array in `src/services/inngest/functions.ts` or it never registers, even if `createFunction(...)` exists elsewhere. All cron scheduling is Inngest-side (declared on each `src/jobs/*.job.ts` function itself, triggered by Inngest's own scheduler hitting `/api/inngest`) — there is no `vercel.json` `crons` entry or `/api/cron` route; don't add one, an earlier no-op stub of both tripped Vercel Hobby-plan's daily-cron-jobs limit on deploy.
 
 `src/jobs/*.job.ts`, registered in `src/services/inngest/functions.ts` — the only background jobs in the app:
-- `meta-ads-performance-sync.job.ts` — nightly cron, populates `ad_performance_daily`.
 - `social-scheduled-post-check.job.ts` — event-triggered once per scheduled post, not a recurring poll.
+- `src/services/inngest/content/` — content automation (testing phase): `content/process-queue` (claims queue jobs), `content/generate-job` (one creative end to end), `content/regenerate-requested` (gallery regenerate), and `weeklyContentCycle` (cron Fri 18:00 America/Toronto; when enabled it also plans the whole week's posting days/times up front via `planCycleWeek`). **The cron is inert: it only acts for a business whose `content_automation_settings.auto_run_enabled` is true, and the settings API refuses to set that during testing.** Generation starts only from the gallery's manual "Generate now" (`POST /api/content/trigger`). The `blog` pipeline (`generate-blog.ts`: AI looks at the listing photos, decides the post's format/angle/structure/images each run, writes it, generates images from the listing photos) is display-only like the rest. None of these ever publishes — output goes to the gallery tables only; there is no code path from generation to `social_posts`/Upload-Post yet. Don't wire one in without being asked.
 
-**Four other background jobs were deliberately removed — don't reintroduce any of them without being explicitly asked:**
-- A weekly self-ad-analysis job and an earlier competitor-analysis job, which fed AI-generated "market intelligence" into ad-generation prompts. Both jobs, the `ad_analysis_reports` table, and every prompt section reading it are gone — ad generation is grounded only in the business's own Settings context and the user's idea/brief now.
-- A 5-minute Meta Ads leads-sync cron and a 5-minute social/root-dashboard analytics-cache-refresh cron. Both pages now call their third-party APIs live on every load instead (`LeadsService.syncFromMeta()`; `UploadPostService.getProfileAnalytics`/`getTotalImpressions`) — always-fresh data was judged more valuable than avoiding the real round trip (Meta Graph ~7-8s; Upload-Post ~several seconds). If page-load latency becomes a real problem, restoring a cache job is a decision for whoever's asking to make explicitly.
+**Video generation exists only in content automation** (Seedance 2.5 clips concatenated by the FFmpeg service). The old Social AI video pipeline (script → ElevenLabs narration → per-scene images → Seedance 1.5 clips → stitch), ElevenLabs, and the Settings video-reference photos were removed — don't reintroduce them without being asked. Social still generates *images* and publishes uploaded video.
+
+**The Meta Ads module was removed entirely** (pages, `/api/meta-ads/*`, its Inngest jobs, the nightly performance sync, the leads sync, the Graph API client, and the `campaigns`/`ad_sets`/`ads`/`meta_ad_creatives`/`studio_*`/`ad_performance_daily`/`leads` tables). The product is now posting automation only — don't reintroduce Meta functionality, `META_*` env vars, or any Meta Graph API call without being explicitly asked. The root/social dashboards call Upload-Post live on every load (`UploadPostService.getProfileAnalytics`/`getTotalImpressions`); there is no analytics-cache cron.
 
 ## Documentation map
 
@@ -43,21 +43,21 @@ This file covers cross-cutting conventions only. For anything deeper, read the r
 - [`docs/architecture/database_schema.md`](docs/architecture/database_schema.md) — every table, column, and relationship, verified against `supabase/migrations/`.
 - [`docs/architecture/system_design.md`](docs/architecture/system_design.md) — how Next.js, Supabase, and Inngest fit together, and the single-tenant-on-multi-tenant-schema model.
 - [`docs/architecture/content_automation.md`](docs/architecture/content_automation.md) — the content-automation schema (12 new tables), Testing/Live safeguards, rotation algorithm and publishing flow. Migration applied to the linked project.
-- [`docs/modules/*.md`](docs/modules/) — one file per product module (Meta Ads, Social Media, Listings), what's actually built.
+- [`docs/modules/*.md`](docs/modules/) — one file per product module (Social Media, Listings, Settings), what's actually built.
 - [`DESIGN.md`](DESIGN.md) (imported above, always in context) — the UI design system: tokens, component specs, and rules for building consistent UI.
 
 ## Architecture
 
-Kinetix is a single-tenant marketing-automation platform for one client (Kangrooo, a Canadian space and venue booking marketplace). It is a Next.js App Router app with several product "modules" (Meta Ads, Social Media, Settings), navigated via a two-tier sidebar (`PrimarySidebar` = modules, `SecondarySidebar` = per-module tabs) driven by the URL's pathname prefix in `src/app/(app)/layout.tsx`.
+Kinetix is a single-tenant marketing-automation platform for one client (Kangrooo, a Canadian space and venue booking marketplace). It is a Next.js App Router app with several product "modules" (Content Automation, Social Media, Listings, Settings), navigated via ONE single-level sidebar (`src/components/layout/Sidebar.tsx`): flat links grouped under non-clickable section captions, Settings pinned at the bottom. The active link is the most specific href matching the pathname (`src/config/nav-active.ts`). Don't reintroduce nested/two-tier navigation.
 
-**Meta Ads (temporarily hidden via `FEATURES.metaAds` in `src/config/features.ts` — nav, pages and root-dashboard data; flip to `true` to restore), and Social Media have real functionality built**, plus **Listings** (`/listings`, a single-page module: the property inventory table with a detail drawer) — these are the only product modules in the app today.
+**Content Automation (`/content` — Gallery + Automation tabs; testing phase, gallery-only) and Social Media have real functionality built**, plus **Listings** (`/listings`, a single-page module: the property inventory table with a detail drawer) — these, with Settings and the root Dashboard, are the only product modules in the app today.
 
 ### Module structure — always follow this split
 
 - `src/app/(app)/<module>/<tab>/page.tsx` — thin file, just renders the real page component. Real logic never lives here.
 - `src/modules/<module>/pages/*.tsx` — the actual page components.
 - `src/modules/<module>/components/`, `hooks/`, `services/`, `types/` — everything else for that module.
-- Nav entries are centralized, not inferred from the filesystem: a new page needs an entry in both `src/config/routes.ts` (`ROUTES`) and `src/config/navigation.ts` (`SECONDARY_NAV_ITEMS`), or the sidebar link won't exist / will 404.
+- Nav entries are centralized, not inferred from the filesystem: a new page needs an entry in both `src/config/routes.ts` (`ROUTES`) and `src/config/navigation.ts` (a link in `NAV_SECTIONS`, or `NAV_FOOTER_ITEMS`), or the sidebar link won't exist / will 404. Keep labels unique across the whole sidebar and equal to the page's own title.
 - New shared UI components go in `src/components/ui/` — see `DESIGN.md` §7 for the full component inventory and the PascalCase-filename convention for new ones.
 
 ### Single-tenant assumption
@@ -76,20 +76,7 @@ Supabase email/password sign-in only (`src/modules/auth`). **There is no public 
 
 ### AI orchestration
 
-`aiOrchestrator` in `src/services/ai/orchestrator.ts` is the single entry point for every AI provider — the only 4 actually wired in are OpenAI/Gemini (`executeTask`, text), Kie (`createImageTask`/`createVideoTask`/`checkTaskStatus`, image/video), and ElevenLabs (`generateSpeech`, voice). Always call through this, never a provider SDK directly from a route or job. All prompt-building logic lives in `src/prompts/<domain>/index.ts` as plain exported functions, one file per domain — never inline long prompt strings in a route.
-
-### Meta Ads module — credentials and data model
-
-Two separate Meta credentials, both declared in `src/config/env.ts`'s zod schema (optional there, since they're server-only) and read via the parsed `env` object, not `process.env` directly:
-- `META_ACCESS_TOKEN` + `META_AD_ACCOUNT_ID` — ad-account scope, covers Campaigns/Reports/Ad Library.
-- `META_PAGE_ID` + `META_PAGE_TOKEN` — Page scope, only for Leads (Instant Forms).
-
-`src/services/meta/graph-client.ts` is the one shared Graph API client (`graphGet`/`graphGetAllPages`/`graphPost`/`graphPostForm`/`graphDelete` + `metaErrorMessage()`) — every Meta call should go through it rather than a fresh `fetch()`.
-
-The `campaigns`/`ad_sets`/`ads`/`leads` tables are a **pointer, not a mirror**: they store our own config plus an `external_*_id` pointing at the real Meta object. Current status/spend is always fetched live from the Graph API (short TanStack Query cache), never persisted — only `ad_performance_daily` (nightly snapshot job) and `leads` are meant to be durably stored. New Campaigns/Ad Sets/Ads are always created `PAUSED` on Meta; going live is a separate explicit action (Smart Run / Resume).
-
-**Leads has no webhook — `GET /api/meta-ads/leads` calls Meta live on every request instead** (see Background jobs above for why). It calls `LeadsService.syncFromMeta()` (upserts on `meta_lead_id`, never deletes) before reading `leads`, so any lead from an earlier sync stays in the table even if a later Graph API response omits it — reading right after syncing already reflects both sources, not just the latest call. If the live sync fails, the route degrades to whatever's already in `leads` rather than failing the page. "Sync now" (`POST /api/meta-ads/leads/sync`, same underlying service) forces another sync without leaving/reloading the page. No `META_APP_SECRET`/`META_WEBHOOK_VERIFY_TOKEN`/HMAC verification/dashboard subscription needed either way.
-
+`aiOrchestrator` in `src/services/ai/orchestrator.ts` is the single entry point for every AI provider — the only 2 actually wired in are OpenAI (`executeTask`, text) and Kie (`createImageTask`/`createSeedanceVideoTask`/`checkTaskStatus`, image and Seedance 2.5 video). Always call through this, never a provider SDK directly from a route or job. All prompt-building logic lives in `src/prompts/<domain>/index.ts` as plain exported functions, one file per domain — never inline long prompt strings in a route.
 
 ### Styling — a recurring gotcha
 

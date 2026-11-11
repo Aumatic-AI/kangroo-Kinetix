@@ -1,9 +1,7 @@
 /**
  * Shape of GET/POST /api/settings — camelCase mirror of the businesses
  * table's columns that are actually read somewhere in the app today
- * (see src/store/business.store.ts's BusinessService,
- * src/modules/meta-ads/components/campaigns/shared.tsx's
- * useBusinessMetaAdsDefaults).
+ * (see src/store/business.store.ts's BusinessService).
  * businesses.keywords/guidelines are deliberately left out — they have no
  * defined shape and nothing in the app reads them yet, so building a
  * settings UI for them would just be guessing. business_colors now has a
@@ -32,8 +30,4 @@ export interface BusinessSettings {
   targetAudience: string;
   services: BusinessServiceInput[];
   targetCountries: string[];
-  metaAdsAdvantageAudienceDefault: boolean;
-  videoReferenceEnabled: boolean;
-  videoReferenceMaleUrl: string | null;
-  videoReferenceFemaleUrl: string | null;
 }

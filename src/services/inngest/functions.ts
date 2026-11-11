@@ -1,15 +1,12 @@
-import { generateImageAd, generateVideoAd, generateStudioImage, editStudioImage } from "./meta-ads";
-import { generateSocialImage, generateSocialVideo } from "./social";
-import { metaAdsPerformanceSyncJob } from "@/jobs/meta-ads-performance-sync.job";
+import { generateSocialImage } from "./social";
+import { processContentQueue, generateContentJob, regenerateContentRevision, weeklyContentCycle } from "./content";
 import { socialScheduledPostCheck } from "@/jobs/social-scheduled-post-check.job";
 
 export const functions = [
-  metaAdsPerformanceSyncJob,
   socialScheduledPostCheck,
-  generateImageAd,
-  generateVideoAd,
-  generateStudioImage,
-  editStudioImage,
   generateSocialImage,
-  generateSocialVideo,
+  processContentQueue,
+  generateContentJob,
+  regenerateContentRevision,
+  weeklyContentCycle,
 ];

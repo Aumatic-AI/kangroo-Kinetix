@@ -1,11 +1,15 @@
 import { LucideIcon } from "lucide-react";
 
-export type ProductModule = "dashboard" | "metaAds" | "social" | "listings" | "settings";
-
 export interface NavItem {
   id: string;
   label: string;
   href: string;
   icon: LucideIcon;
-  module: ProductModule;
+}
+
+/** A group of sidebar links under an optional, non-clickable caption. */
+export interface NavSection {
+  id: string;
+  label?: string;
+  items: NavItem[];
 }

@@ -3,7 +3,6 @@ export const appConfig = {
   version: "1.0.0",
   description: "AI Automation Platform",
   features: {
-    metaAds: true,
     socialMedia: true,
   },
 } as const;

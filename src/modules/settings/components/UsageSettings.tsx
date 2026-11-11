@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ImageIcon, Video, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ImageIcon, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Section } from "@/components/ui/Section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -38,14 +38,6 @@ function fmtRange(r: CostRange): string {
 function perUnitCost(total: CostRange, count: number, fallback: CostRange): CostRange {
   if (count === 0) return fallback;
   return { minINR: total.minINR / count, maxINR: total.maxINR / count, confidence: total.confidence };
-}
-
-function addRanges(a: CostRange, b: CostRange): CostRange {
-  return { minINR: a.minINR + b.minINR, maxINR: a.maxINR + b.maxINR, confidence: a.confidence === "reliable" && b.confidence === "reliable" ? "reliable" : "rough" };
-}
-
-function averageRanges(a: CostRange, b: CostRange): CostRange {
-  return { minINR: (a.minINR + b.minINR) / 2, maxINR: (a.maxINR + b.maxINR) / 2, confidence: a.confidence === "reliable" && b.confidence === "reliable" ? "reliable" : "rough" };
 }
 
 function AccuracyBadge({ confidence }: { confidence: CostConfidence }) {
@@ -153,21 +145,10 @@ export function UsageSettings() {
               <TableBody>
                 <UsageRow
                   icon={ImageIcon}
-                  name="Image ads"
-                  countLabel={`${data.counts.imageAdCount + data.counts.studioImageCount} generated`}
-                  perUnit={perUnitCost(
-                    addRanges(data.estimate.imageAd, data.estimate.studio),
-                    data.counts.imageAdCount + data.counts.studioImageCount,
-                    averageRanges(typicalUnitCosts().imageAd, typicalUnitCosts().studioImage)
-                  )}
-                  total={addRanges(data.estimate.imageAd, data.estimate.studio)}
-                />
-                <UsageRow
-                  icon={Video}
-                  name="Video ads"
-                  countLabel={`${data.counts.videoAdCount} generated`}
-                  perUnit={perUnitCost(data.estimate.video, data.counts.videoAdCount, typicalUnitCosts().video)}
-                  total={data.estimate.video}
+                  name="Images"
+                  countLabel={`${data.counts.imageAdCount} generated`}
+                  perUnit={perUnitCost(data.estimate.imageAd, data.counts.imageAdCount, typicalUnitCosts().imageAd)}
+                  total={data.estimate.imageAd}
                 />
               </TableBody>
             </Table>

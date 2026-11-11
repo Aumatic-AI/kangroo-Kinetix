@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { env } from '@/config';
-import { FEATURES } from '@/config/features';
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -40,13 +39,6 @@ export async function proxy(request: NextRequest) {
   if (!user && !isAuthRoute && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
-
-  // Meta Ads is temporarily hidden (see src/config/features.ts) — send its pages to the dashboard.
-  if (!FEATURES.metaAds && request.nextUrl.pathname.startsWith('/meta-ads')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
 

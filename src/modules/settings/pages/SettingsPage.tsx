@@ -6,17 +6,15 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnsavedChangesBar } from "@/components/ui/UnsavedChangesBar";
-import { Switch } from "@/components/ui/Switch";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { BusinessSettings } from "../types/settings.types";
-import { Field, ServicesEditor, VideoReferenceUploader, LogoUploader } from "../components/shared";
+import { Field, ServicesEditor, LogoUploader } from "../components/shared";
 import { UsageSettings } from "../components/UsageSettings";
 
 const SETTINGS_TABS = [
   { value: "general", label: "General" },
   { value: "voice", label: "Brand & Voice" },
   { value: "services", label: "Services" },
-  { value: "automation", label: "Automation Defaults" },
   { value: "usage", label: "Usage" },
 ];
 
@@ -24,8 +22,7 @@ const SETTINGS_TABS = [
  * The one Settings page, reached at /settings — no secondary sidebar and
  * no further route-level sub-pages, just this one page backed by the
  * businesses table. Every field here maps to a column that's actually read
- * somewhere else in the app (AI prompt context, Meta Ads
- * defaults). Columns with no real consumer yet
+ * somewhere else in the app (AI prompt context). Columns with no real consumer yet
  * (keywords, business_colors, guidelines) are deliberately left out rather
  * than guessed at. The "so many settings" problem is solved with in-page
  * Tabs instead, not a secondary sidebar or more routes.
@@ -144,43 +141,6 @@ export function SettingsPage() {
           <Section title="Services" description="What this business actually offers — used so AI-facing features know what each service means.">
             <ServicesEditor services={form.services} onChange={(services) => patch({ services })} />
           </Section>
-      )}
-
-      {activeTab === "automation" && (
-          <div className="space-y-4">
-            <Section title="Meta Ads Defaults" description="Applied automatically when launching a new campaign or ad set.">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.metaAdsAdvantageAudienceDefault}
-                  onChange={(e) => patch({ metaAdsAdvantageAudienceDefault: e.target.checked })}
-                  className="mt-0.5 w-4 h-4 rounded border-border accent-primary"
-                />
-                <span className="text-xs text-text">
-                  <span className="font-semibold">Advantage+ Audience by default</span>
-                  <span className="block text-muted">When on, Meta can show your ad to people outside the exact audience you picked, if it thinks they&apos;re likely to respond — usually better results, but less control over exactly who sees it.</span>
-                </span>
-              </label>
-            </Section>
-
-            <Section title="Video Character Reference" description="Optional — locks every AI-generated video (Meta Ads + Social Media) to one real person's photo per gender, so the character stays visually consistent scene to scene. Image generation is never affected.">
-              <div className="flex items-center gap-6 flex-wrap">
-                <div className="flex items-center gap-3 shrink-0">
-                  <Switch checked={form.videoReferenceEnabled} onCheckedChange={(checked) => patch({ videoReferenceEnabled: checked })} />
-                  <span className="text-xs font-semibold text-text">Use reference photo for video generation</span>
-                </div>
-                {form.videoReferenceEnabled && (
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <VideoReferenceUploader gender="male" label="Male Reference Photo" url={data?.videoReferenceMaleUrl ?? null} />
-                    <VideoReferenceUploader gender="female" label="Female Reference Photo" url={data?.videoReferenceFemaleUrl ?? null} />
-                  </div>
-                )}
-              </div>
-              {form.videoReferenceEnabled && (!data?.videoReferenceMaleUrl || !data?.videoReferenceFemaleUrl) && (
-                <p className="text-xs text-warning mt-2">Upload both photos above — Save is blocked until both are set.</p>
-              )}
-            </Section>
-          </div>
       )}
 
       {activeTab === "usage" && <UsageSettings />}

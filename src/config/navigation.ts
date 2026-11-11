@@ -2,125 +2,54 @@ import {
   LayoutDashboard,
   Megaphone,
   Send,
-  Share2,
   Settings,
-  Users,
-  BookOpen,
   Link,
-  PlayCircle,
-  FileText,
   Building2,
+  Images,
+  SlidersHorizontal,
+  BarChart3,
 } from "lucide-react";
-import { NavItem, ProductModule } from "@/types";
+import { NavItem, NavSection } from "@/types";
 import { ROUTES } from "./routes";
-import { FEATURES } from "./features";
 
-export const PRIMARY_NAV_ITEMS: NavItem[] = ([
+/**
+ * The sidebar: ONE level. Links are grouped under non-clickable section
+ * captions by what you're doing, never nested. Labels are unique across the
+ * whole list and match each page's own title. A new page needs an entry in both
+ * `ROUTES` and here, or its link won't exist.
+ */
+export const NAV_SECTIONS: NavSection[] = [
   {
-    id: "dashboard",
-    label: "Dashboard",
-    href: ROUTES.DASHBOARD.HOME,
-    icon: LayoutDashboard,
-    module: "dashboard",
+    id: "overview",
+    items: [
+      { id: "dashboard", label: "Dashboard", href: ROUTES.DASHBOARD.HOME, icon: LayoutDashboard },
+    ],
   },
   {
-    id: "metaAds",
-    label: "Meta Ads",
-    href: ROUTES.META_ADS.DASHBOARD,
-    icon: Megaphone,
-    module: "metaAds",
+    id: "content",
+    label: "Content",
+    items: [
+      { id: "content-gallery", label: "Content Gallery", href: ROUTES.CONTENT.GALLERY, icon: Images },
+      { id: "listings", label: "Listings", href: ROUTES.LISTINGS.ROOT, icon: Building2 },
+      { id: "automation", label: "Automation", href: ROUTES.CONTENT.AUTOMATION, icon: SlidersHorizontal },
+    ],
   },
   {
     id: "social",
-    label: "Social Media",
-    href: ROUTES.SOCIAL.DASHBOARD,
-    icon: Share2,
-    module: "social",
+    label: "Social",
+    items: [
+      { id: "posts", label: "Posts", href: ROUTES.SOCIAL.POSTS, icon: Megaphone },
+      { id: "published", label: "Published", href: ROUTES.SOCIAL.PUBLISHED, icon: Send },
+      { id: "social-analytics", label: "Social Analytics", href: ROUTES.SOCIAL.DASHBOARD, icon: BarChart3 },
+      { id: "connected-accounts", label: "Connected Accounts", href: ROUTES.SOCIAL.CONNECTED_ACCOUNTS, icon: Link },
+    ],
   },
-  {
-    id: "listings",
-    label: "Listings",
-    href: ROUTES.LISTINGS.ROOT,
-    icon: Building2,
-    module: "listings",
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    href: ROUTES.SETTINGS.ROOT,
-    icon: Settings,
-    module: "settings",
-  },
-] as NavItem[]).filter((item) => FEATURES.metaAds || item.module !== "metaAds");
+];
 
-export const SECONDARY_NAV_ITEMS: Record<
-  ProductModule,
-  Omit<NavItem, "module">[]
-> = {
-  dashboard: [],
-  metaAds: [
-    {
-      id: "ma-dashboard",
-      label: "Dashboard",
-      href: ROUTES.META_ADS.DASHBOARD,
-      icon: LayoutDashboard,
-    },
-    {
-      id: "ma-library",
-      label: "Ad Library",
-      href: ROUTES.META_ADS.AD_LIBRARY,
-      icon: BookOpen,
-    },
-    {
-      id: "ma-campaigns",
-      label: "Campaigns",
-      href: ROUTES.META_ADS.CAMPAIGNS,
-      icon: PlayCircle,
-    },
-    {
-      id: "ma-reports",
-      label: "Reports",
-      href: ROUTES.META_ADS.REPORTS,
-      icon: FileText,
-    },
-    {
-      id: "ma-leads",
-      label: "Lead Responses",
-      href: ROUTES.META_ADS.LEADS,
-      icon: Users,
-    },
-  ],
-  social: [
-    {
-      id: "sm-dashboard",
-      label: "Dashboard",
-      href: ROUTES.SOCIAL.DASHBOARD,
-      icon: LayoutDashboard,
-    },
-    {
-      id: "sm-posts",
-      label: "Gallery",
-      href: ROUTES.SOCIAL.POSTS,
-      icon: Megaphone,
-    },
-    {
-      id: "sm-published",
-      label: "Published",
-      href: ROUTES.SOCIAL.PUBLISHED,
-      icon: Send,
-    },
-    {
-      id: "sm-accounts",
-      label: "Connected Accounts",
-      href: ROUTES.SOCIAL.CONNECTED_ACCOUNTS,
-      icon: Link,
-    },
-  ],
-  // Settings is a single flat page (no sub-tabs) — everything lives on
-  // /settings itself, organized by in-page Tabs instead of a secondary
-  // sidebar. SecondarySidebar already renders nothing when its module's
-  // list is empty (same as "dashboard").
-  settings: [],
-  // Listings is likewise one flat page: the table, with a drawer for detail.
-  listings: [],
-};
+/** Pinned to the bottom of the sidebar, below a divider. */
+export const NAV_FOOTER_ITEMS: NavItem[] = [
+  { id: "settings", label: "Settings", href: ROUTES.SETTINGS.ROOT, icon: Settings },
+];
+
+/** Every link, in display order — used to resolve the active item. */
+export const ALL_NAV_ITEMS: NavItem[] = [...NAV_SECTIONS.flatMap((s) => s.items), ...NAV_FOOTER_ITEMS];

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Hexagon } from "lucide-react";
 import { ProfileMenu } from "./ProfileMenu";
@@ -12,6 +13,8 @@ export function Navbar() {
         <span className="font-bold text-xl text-text tracking-tight">
           Kinetix
         </span>
+        <span aria-hidden className="h-5 w-px bg-border" />
+        <Image src="/kangrooo-logo.png" alt="Kangrooo" width={283} height={65} className="h-5 w-auto" priority />
       </Link>
       
       <div className="flex items-center gap-4">

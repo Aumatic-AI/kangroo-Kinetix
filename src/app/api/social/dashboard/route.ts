@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/supabase";
-import { MetaAdsService } from "@/modules/meta-ads/services/meta-ads.service";
+import { getFirstBusinessId } from "@/lib/business";
 import { env } from "@/config/env";
 import { UploadPostService, SUPPORTED_UPLOAD_POST_PLATFORMS, type UploadPostPlatform, type UploadPostProfileAnalytics } from "@/services/upload-post";
 
@@ -51,7 +51,7 @@ function engagementOf(m: { likes?: number; comments?: number; shares?: number; s
 export async function GET() {
   try {
     const supabase = (await createClient()) as SupabaseClient<Database>;
-    const businessId = await MetaAdsService.getFirstBusinessId(supabase);
+    const businessId = await getFirstBusinessId(supabase);
     if (!businessId) return NextResponse.json(EMPTY);
 
     const { data: connectionRows } = await supabase.from("platform_connections").select("platform, status").eq("business_id", businessId);

@@ -17,7 +17,6 @@ export async function GET() {
     const { data: business, error } = await supabase.from("businesses").select("*").limit(1).single();
     if (error || !business) return NextResponse.json({ error: "No business found" }, { status: 404 });
 
-    const settingsJson = (business.settings as Record<string, any> | null) || {};
     const services = Array.isArray(business.services) ? (business.services as Record<string, any>[]) : [];
 
     const settings: BusinessSettings = {
@@ -35,10 +34,6 @@ export async function GET() {
       targetAudience: business.target_audience || "",
       services: services.map((s) => ({ name: s.name || "", description: s.description || undefined })),
       targetCountries: Array.isArray(business.target_countries) ? (business.target_countries as string[]) : [],
-      metaAdsAdvantageAudienceDefault: !!settingsJson.meta_ads?.advantage_audience_default,
-      videoReferenceEnabled: business.video_reference_enabled,
-      videoReferenceMaleUrl: business.video_reference_male_url,
-      videoReferenceFemaleUrl: business.video_reference_female_url,
     };
 
     return NextResponse.json({ settings });
@@ -55,16 +50,10 @@ export async function POST(request: Request) {
 
     const { data: business, error: findError } = await supabase
       .from("businesses")
-      .select("id, settings, video_reference_male_url, video_reference_female_url")
+      .select("id, settings")
       .limit(1)
       .single();
     if (findError || !business) return NextResponse.json({ error: "No business found" }, { status: 404 });
-
-    if (body.videoReferenceEnabled && (!business.video_reference_male_url || !business.video_reference_female_url)) {
-      return NextResponse.json({ error: "Upload both a male and a female reference photo before enabling this." }, { status: 400 });
-    }
-
-    const existingSettingsJson = (business.settings as Record<string, any> | null) || {};
 
     const { error } = await supabase
       .from("businesses")
@@ -82,8 +71,6 @@ export async function POST(request: Request) {
         target_audience: body.targetAudience || null,
         services: body.services.filter((s) => s.name.trim()) as any,
         target_countries: body.targetCountries,
-        settings: { ...existingSettingsJson, meta_ads: { ...existingSettingsJson.meta_ads, advantage_audience_default: body.metaAdsAdvantageAudienceDefault } },
-        video_reference_enabled: body.videoReferenceEnabled,
       })
       .eq("id", business.id);
 

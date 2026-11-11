@@ -22,6 +22,8 @@ export interface ConfirmModalProps {
   loading?: boolean;
   /** Shown inline when the action failed — the dialog stays open so the user can retry. */
   error?: string;
+  /** Disables the confirm button (e.g. nothing is selected yet). */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
 }
 
@@ -41,6 +43,7 @@ export function ConfirmModal({
   variant = "primary",
   loading,
   error,
+  confirmDisabled,
   onConfirm,
 }: ConfirmModalProps) {
   return (
@@ -54,7 +57,7 @@ export function ConfirmModal({
         {error && <p className="text-sm text-danger font-medium">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>{cancelLabel}</Button>
-          <Button variant={variant === "destructive" ? "destructive" : "primary"} onClick={onConfirm} loading={loading}>
+          <Button variant={variant === "destructive" ? "destructive" : "primary"} onClick={onConfirm} loading={loading} disabled={confirmDisabled}>
             {confirmLabel}
           </Button>
         </DialogFooter>

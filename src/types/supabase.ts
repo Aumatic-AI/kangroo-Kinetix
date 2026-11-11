@@ -14,220 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      ad_performance_daily: {
-        Row: {
-          ad_id: string | null
-          ad_text: string | null
-          business_id: string
-          clicks: number
-          conversions: number
-          cpa: number | null
-          cpc_cents: number | null
-          cpm_cents: number | null
-          ctr: number | null
-          format: string | null
-          hold_rate: number | null
-          hook_rate: number | null
-          id: number
-          impressions: number
-          media_url: string | null
-          meta_ad_id: string | null
-          metric_date: string
-          raw_data: Json
-          reach: number
-          roas: number | null
-          spend_cents: number
-        }
-        Insert: {
-          ad_id?: string | null
-          ad_text?: string | null
-          business_id: string
-          clicks?: number
-          conversions?: number
-          cpa?: number | null
-          cpc_cents?: number | null
-          cpm_cents?: number | null
-          ctr?: number | null
-          format?: string | null
-          hold_rate?: number | null
-          hook_rate?: number | null
-          id?: never
-          impressions?: number
-          media_url?: string | null
-          meta_ad_id?: string | null
-          metric_date: string
-          raw_data?: Json
-          reach?: number
-          roas?: number | null
-          spend_cents?: number
-        }
-        Update: {
-          ad_id?: string | null
-          ad_text?: string | null
-          business_id?: string
-          clicks?: number
-          conversions?: number
-          cpa?: number | null
-          cpc_cents?: number | null
-          cpm_cents?: number | null
-          ctr?: number | null
-          format?: string | null
-          hold_rate?: number | null
-          hook_rate?: number | null
-          id?: never
-          impressions?: number
-          media_url?: string | null
-          meta_ad_id?: string | null
-          metric_date?: string
-          raw_data?: Json
-          reach?: number
-          roas?: number | null
-          spend_cents?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ad_performance_daily_ad_id_fkey"
-            columns: ["ad_id"]
-            isOneToOne: false
-            referencedRelation: "ads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ad_performance_daily_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ad_sets: {
-        Row: {
-          bid_strategy: string | null
-          business_id: string
-          campaign_id: string
-          created_at: string
-          daily_budget_cents: number | null
-          end_at: string | null
-          external_adset_id: string | null
-          id: string
-          lifetime_budget_cents: number | null
-          name: string
-          optimization_goal: string | null
-          placements: Json
-          start_at: string | null
-          status: Database["public"]["Enums"]["campaign_status"]
-          targeting: Json
-        }
-        Insert: {
-          bid_strategy?: string | null
-          business_id: string
-          campaign_id: string
-          created_at?: string
-          daily_budget_cents?: number | null
-          end_at?: string | null
-          external_adset_id?: string | null
-          id?: string
-          lifetime_budget_cents?: number | null
-          name: string
-          optimization_goal?: string | null
-          placements?: Json
-          start_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          targeting?: Json
-        }
-        Update: {
-          bid_strategy?: string | null
-          business_id?: string
-          campaign_id?: string
-          created_at?: string
-          daily_budget_cents?: number | null
-          end_at?: string | null
-          external_adset_id?: string | null
-          id?: string
-          lifetime_budget_cents?: number | null
-          name?: string
-          optimization_goal?: string | null
-          placements?: Json
-          start_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          targeting?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ad_sets_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ad_sets_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ads: {
-        Row: {
-          ad_set_id: string
-          business_id: string
-          created_at: string
-          creative_id: string | null
-          external_ad_id: string | null
-          external_creative_id: string | null
-          id: string
-          name: string
-          status: Database["public"]["Enums"]["campaign_status"]
-        }
-        Insert: {
-          ad_set_id: string
-          business_id: string
-          created_at?: string
-          creative_id?: string | null
-          external_ad_id?: string | null
-          external_creative_id?: string | null
-          id?: string
-          name: string
-          status?: Database["public"]["Enums"]["campaign_status"]
-        }
-        Update: {
-          ad_set_id?: string
-          business_id?: string
-          created_at?: string
-          creative_id?: string | null
-          external_ad_id?: string | null
-          external_creative_id?: string | null
-          id?: string
-          name?: string
-          status?: Database["public"]["Enums"]["campaign_status"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ads_ad_set_id_fkey"
-            columns: ["ad_set_id"]
-            isOneToOne: false
-            referencedRelation: "ad_sets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ads_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ads_creative_id_fkey"
-            columns: ["creative_id"]
-            isOneToOne: false
-            referencedRelation: "meta_ad_creatives"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       api_credentials: {
         Row: {
           business_id: string
@@ -327,9 +113,6 @@ export type Database = {
           target_countries: Json | null
           tone_of_voice: string | null
           updated_at: string
-          video_reference_enabled: boolean
-          video_reference_female_url: string | null
-          video_reference_male_url: string | null
           website_url: string | null
         }
         Insert: {
@@ -353,9 +136,6 @@ export type Database = {
           target_countries?: Json | null
           tone_of_voice?: string | null
           updated_at?: string
-          video_reference_enabled?: boolean
-          video_reference_female_url?: string | null
-          video_reference_male_url?: string | null
           website_url?: string | null
         }
         Update: {
@@ -379,9 +159,6 @@ export type Database = {
           target_countries?: Json | null
           tone_of_voice?: string | null
           updated_at?: string
-          video_reference_enabled?: boolean
-          video_reference_female_url?: string | null
-          video_reference_male_url?: string | null
           website_url?: string | null
         }
         Relationships: [
@@ -394,75 +171,11 @@ export type Database = {
           },
         ]
       }
-      campaigns: {
-        Row: {
-          ad_account_id: string | null
-          business_id: string
-          created_at: string
-          currency: string
-          daily_budget_cents: number | null
-          end_at: string | null
-          external_campaign_id: string | null
-          id: string
-          lifetime_budget_cents: number | null
-          name: string
-          objective: string | null
-          start_at: string | null
-          status: Database["public"]["Enums"]["campaign_status"]
-          updated_at: string
-        }
-        Insert: {
-          ad_account_id?: string | null
-          business_id: string
-          created_at?: string
-          currency?: string
-          daily_budget_cents?: number | null
-          end_at?: string | null
-          external_campaign_id?: string | null
-          id?: string
-          lifetime_budget_cents?: number | null
-          name: string
-          objective?: string | null
-          start_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          updated_at?: string
-        }
-        Update: {
-          ad_account_id?: string | null
-          business_id?: string
-          created_at?: string
-          currency?: string
-          daily_budget_cents?: number | null
-          end_at?: string | null
-          external_campaign_id?: string | null
-          id?: string
-          lifetime_budget_cents?: number | null
-          name?: string
-          objective?: string | null
-          start_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ad_campaigns_connected_account_id_fkey"
-            columns: ["ad_account_id"]
-            isOneToOne: false
-            referencedRelation: "platform_connections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "campaigns_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       content_automation_settings: {
         Row: {
+          auto_run_enabled: boolean
           automation_mode: string
+          blog_frequency_per_week: number
           business_id: string
           created_at: string
           generation_timezone: string
@@ -475,7 +188,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_run_enabled?: boolean
           automation_mode?: string
+          blog_frequency_per_week?: number
           business_id: string
           created_at?: string
           generation_timezone?: string
@@ -488,7 +203,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_run_enabled?: boolean
           automation_mode?: string
+          blog_frequency_per_week?: number
           business_id?: string
           created_at?: string
           generation_timezone?: string
@@ -604,6 +321,7 @@ export type Database = {
       }
       content_generation_cycles: {
         Row: {
+          blog_target_count: number
           business_id: string
           completed_at: string | null
           created_at: string
@@ -615,9 +333,11 @@ export type Database = {
           status: string
           updated_at: string
           week_end: string | null
+          week_plan: Json | null
           week_start: string
         }
         Insert: {
+          blog_target_count?: number
           business_id: string
           completed_at?: string | null
           created_at?: string
@@ -629,9 +349,11 @@ export type Database = {
           status?: string
           updated_at?: string
           week_end?: string | null
+          week_plan?: Json | null
           week_start: string
         }
         Update: {
+          blog_target_count?: number
           business_id?: string
           completed_at?: string | null
           created_at?: string
@@ -643,6 +365,7 @@ export type Database = {
           status?: string
           updated_at?: string
           week_end?: string | null
+          week_plan?: Json | null
           week_start?: string
         }
         Relationships: [
@@ -791,6 +514,7 @@ export type Database = {
         Row: {
           business_id: string
           caption: string | null
+          content_decision: Json | null
           created_at: string
           created_by: string | null
           format_reason: string | null
@@ -799,6 +523,7 @@ export type Database = {
           id: string
           media_asset_id: string | null
           property_content_id: string
+          proposed_schedule: Json | null
           revision_number: number
           script: string | null
           validated_at: string | null
@@ -810,6 +535,7 @@ export type Database = {
         Insert: {
           business_id: string
           caption?: string | null
+          content_decision?: Json | null
           created_at?: string
           created_by?: string | null
           format_reason?: string | null
@@ -818,6 +544,7 @@ export type Database = {
           id?: string
           media_asset_id?: string | null
           property_content_id: string
+          proposed_schedule?: Json | null
           revision_number: number
           script?: string | null
           validated_at?: string | null
@@ -829,6 +556,7 @@ export type Database = {
         Update: {
           business_id?: string
           caption?: string | null
+          content_decision?: Json | null
           created_at?: string
           created_by?: string | null
           format_reason?: string | null
@@ -837,6 +565,7 @@ export type Database = {
           id?: string
           media_asset_id?: string | null
           property_content_id?: string
+          proposed_schedule?: Json | null
           revision_number?: number
           script?: string | null
           validated_at?: string | null
@@ -866,63 +595,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "property_content"
             referencedColumns: ["id", "business_id"]
-          },
-        ]
-      }
-      leads: {
-        Row: {
-          ad_id: string | null
-          ad_name: string | null
-          adset_name: string | null
-          business_id: string
-          campaign_name: string | null
-          created_at: string
-          field_data: Json
-          id: string
-          meta_form_id: string | null
-          meta_lead_id: string
-          status: string
-        }
-        Insert: {
-          ad_id?: string | null
-          ad_name?: string | null
-          adset_name?: string | null
-          business_id: string
-          campaign_name?: string | null
-          created_at?: string
-          field_data?: Json
-          id?: string
-          meta_form_id?: string | null
-          meta_lead_id: string
-          status?: string
-        }
-        Update: {
-          ad_id?: string | null
-          ad_name?: string | null
-          adset_name?: string | null
-          business_id?: string
-          campaign_name?: string | null
-          created_at?: string
-          field_data?: Json
-          id?: string
-          meta_form_id?: string | null
-          meta_lead_id?: string
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "leads_ad_id_fkey"
-            columns: ["ad_id"]
-            isOneToOne: false
-            referencedRelation: "ads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "leads_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -981,100 +653,6 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meta_ad_creatives: {
-        Row: {
-          ad_script: Json | null
-          aspect_ratio: string
-          audio_style: string | null
-          business_id: string
-          character_type: string | null
-          created_at: string
-          duration: string | null
-          id: string
-          idea_prompt: string | null
-          language: string | null
-          media_asset_id: string | null
-          media_urls: Json | null
-          revision_history: Json
-          service: string | null
-          status: string | null
-          studio_session_id: string | null
-          type: string | null
-          updated_at: string
-          video_mode: string
-          video_style: string | null
-          voice_id: string | null
-        }
-        Insert: {
-          ad_script?: Json | null
-          aspect_ratio?: string
-          audio_style?: string | null
-          business_id: string
-          character_type?: string | null
-          created_at?: string
-          duration?: string | null
-          id?: string
-          idea_prompt?: string | null
-          language?: string | null
-          media_asset_id?: string | null
-          media_urls?: Json | null
-          revision_history?: Json
-          service?: string | null
-          status?: string | null
-          studio_session_id?: string | null
-          type?: string | null
-          updated_at?: string
-          video_mode?: string
-          video_style?: string | null
-          voice_id?: string | null
-        }
-        Update: {
-          ad_script?: Json | null
-          aspect_ratio?: string
-          audio_style?: string | null
-          business_id?: string
-          character_type?: string | null
-          created_at?: string
-          duration?: string | null
-          id?: string
-          idea_prompt?: string | null
-          language?: string | null
-          media_asset_id?: string | null
-          media_urls?: Json | null
-          revision_history?: Json
-          service?: string | null
-          status?: string | null
-          studio_session_id?: string | null
-          type?: string | null
-          updated_at?: string
-          video_mode?: string
-          video_style?: string | null
-          voice_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meta_ad_creatives_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meta_ad_creatives_media_asset_id_fkey"
-            columns: ["media_asset_id"]
-            isOneToOne: false
-            referencedRelation: "media_assets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meta_ad_creatives_studio_session_id_fkey"
-            columns: ["studio_session_id"]
-            isOneToOne: false
-            referencedRelation: "studio_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1731,107 +1309,6 @@ export type Database = {
           },
         ]
       }
-      studio_messages: {
-        Row: {
-          content: string | null
-          created_at: string
-          id: string
-          kind: string
-          payload: Json | null
-          role: string
-          session_id: string
-        }
-        Insert: {
-          content?: string | null
-          created_at?: string
-          id?: string
-          kind: string
-          payload?: Json | null
-          role: string
-          session_id: string
-        }
-        Update: {
-          content?: string | null
-          created_at?: string
-          id?: string
-          kind?: string
-          payload?: Json | null
-          role?: string
-          session_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "studio_messages_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "studio_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      studio_sessions: {
-        Row: {
-          aspect_ratio: string
-          business_id: string
-          created_at: string
-          creative_id: string | null
-          id: string
-          initial_idea: string
-          product_area: string
-          qa_brief: Json
-          raw_image_url: string | null
-          reference_image_url: string | null
-          service: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          aspect_ratio?: string
-          business_id: string
-          created_at?: string
-          creative_id?: string | null
-          id?: string
-          initial_idea: string
-          product_area?: string
-          qa_brief?: Json
-          raw_image_url?: string | null
-          reference_image_url?: string | null
-          service?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          aspect_ratio?: string
-          business_id?: string
-          created_at?: string
-          creative_id?: string | null
-          id?: string
-          initial_idea?: string
-          product_area?: string
-          qa_brief?: Json
-          raw_image_url?: string | null
-          reference_image_url?: string | null
-          service?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "studio_sessions_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "studio_sessions_creative_id_fkey"
-            columns: ["creative_id"]
-            isOneToOne: false
-            referencedRelation: "meta_ad_creatives"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       upload_post_analytics_cache: {
         Row: {
           business_id: string
@@ -1984,6 +1461,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      delete_content_item: { Args: { p_id: string }; Returns: undefined }
       ensure_content_clip: {
         Args: { p_index: number; p_revision: string }
         Returns: {
@@ -2088,6 +1566,10 @@ export type Database = {
         Returns: string
       }
       retry_failed_publish: { Args: { p_post: string }; Returns: string }
+      trigger_manual_content_cycle: {
+        Args: { p_blog?: number; p_linkedin?: number; p_social?: number }
+        Returns: string
+      }
       unknown_publish_posts: {
         Args: never
         Returns: {
@@ -2141,7 +1623,6 @@ export type Database = {
       asset_source: "ai_generated" | "uploaded" | "scraped"
       asset_type: "image" | "video" | "audio" | "document"
       business_role: "owner" | "admin" | "editor" | "viewer"
-      campaign_status: "draft" | "active" | "paused" | "completed" | "archived"
       creative_status:
         | "draft"
         | "in_review"
@@ -2319,7 +1800,6 @@ export const Constants = {
       asset_source: ["ai_generated", "uploaded", "scraped"],
       asset_type: ["image", "video", "audio", "document"],
       business_role: ["owner", "admin", "editor", "viewer"],
-      campaign_status: ["draft", "active", "paused", "completed", "archived"],
       creative_status: [
         "draft",
         "in_review",

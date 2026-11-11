@@ -13,8 +13,8 @@ graph TD
     API -- "Dispatch Events" --> Inngest["Inngest Event Broker"]
     Inngest -- "Execute Job Steps" --> Jobs["Inngest Workers (Next.js API)"]
     Jobs -- "Read/Write" --> Supabase
-    Jobs -- "HTTP APIs" --> AI["OpenAI / Kie AI / ElevenLabs / AssemblyAI / Apify"]
-    Jobs -- "Publish" --> Meta["Meta Graph API / Social Platforms"]
+    Jobs -- "HTTP APIs" --> AI["OpenAI / Kie AI"]
+    Jobs -- "Publish" --> Meta["Social Platforms (via Upload-Post)"]
 ```
 
 ## 2. Component Responsibilities
@@ -25,14 +25,14 @@ graph TD
 
 ### B. Next.js Backend (Server Actions / API Routes)
 - **Responsibility:** Secure operations only.
-- **Usage:** Used *only* for things the client cannot do securely — chiefly, dispatching background events to Inngest (`inngest.send()`, e.g. `meta-ads/generate-image`) and calling third-party APIs with server-only secrets (Meta Graph, Upload-Post) that a browser could never hold safely.
-- **No inbound webhooks and no OAuth callbacks today.** Meta Ads' Leads previously used a real-time Lead Ads webhook; it was removed in favor of a scheduled background sync instead (see §2.D below and `modules/meta_ads.md`). Social Media never does OAuth itself — accounts are connected on Upload-Post's own dashboard (see `modules/social_media.md` §3). If either is ever added back, it belongs in this layer.
+- **Usage:** Used *only* for things the client cannot do securely — chiefly, dispatching background events to Inngest (`inngest.send()`, e.g. `social/generate-image`) and calling third-party APIs with server-only secrets (Upload-Post) that a browser could never hold safely.
+- **No inbound webhooks and no OAuth callbacks today.** Social Media never does OAuth itself — accounts are connected on Upload-Post's own dashboard (see `modules/social_media.md` §3). If either is ever added, it belongs in this layer.
 
 ### C. Supabase (Database & Auth)
 - **Auth:** Supabase Auth only. RLS's `auth.uid()` requires Supabase-issued JWTs — there is no separate NextAuth session layer in this app.
 - **Database:** PostgreSQL. Every piece of client data belongs to a `business`, not directly to a `user` — see §3. Users join a business via the `business_users` junction table.
 - **Security:** RLS policies ensure a user can only read/write rows where a `business_users` row links their `auth.uid()` to that row's `business_id`. With one business today, every user simply has one `business_users` row (auto-created — see §3) — functionally equivalent to a simpler model, but the isolation is real and already enforced, not bolted on later.
-- **Vault:** Supabase Vault stores provider secrets (OpenAI, Apify, ElevenLabs, Kie, AssemblyAI) and OAuth tokens (Meta, TikTok, LinkedIn, YouTube, X) by reference — `secret_vault_ref` / `access_token_vault_ref` columns point at a Vault entry; the raw secret never sits in a Postgres column.
+- **Vault:** Supabase Vault stores provider secrets (OpenAI, Kie) and OAuth tokens (TikTok, LinkedIn, YouTube, X) by reference — `secret_vault_ref` / `access_token_vault_ref` columns point at a Vault entry; the raw secret never sits in a Postgres column.
 
 ### D. Inngest (Background Job Engine)
 - **Responsibility:** Managing long-running, error-prone tasks.
@@ -41,25 +41,20 @@ graph TD
 
 | Job | Trigger | Event name / cron |
 |---|---|---|
-| Meta Ads performance sync (writes `ad_performance_daily`) | cron, daily | `0 4 * * *` |
-| Meta ad creative generation (image) | event | `meta-ads/generate-image` |
-| Meta ad creative generation (video) | event | `meta-ads/generate-video` |
-| AI Ad Studio image generation | event | `meta-ads/generate-studio-image` |
-| AI Ad Studio image edit | event | `meta-ads/edit-studio-image` |
 | Social post generation (image) | event | `social/generate-image` |
 | Social post generation (video) | event | `social/generate-video` |
 | Scheduled social post publish | event, one instance per scheduled post — not a recurring poll | `social/scheduled-post-created` |
 
-Only 2 of these are real crons (Meta Ads performance sync, daily) — everything else is either event-triggered on demand or (the scheduled social post publish) fired once per instance, never a recurring poll. Two previously-listed jobs no longer exist at all: a weekly self-ad-performance-analysis job (hourly cron checking a per-business Settings schedule via `shouldRunScheduledJob()`) was removed along with the "market intelligence"/"winning angle" it fed into ad-generation prompts, as an unused feature — see `database_schema.md` §5 and `modules/meta_ads.md` §1. A social/root dashboard analytics cache refresh and a Meta Ads leads sync (both every 5 minutes) were removed earlier still — see the Leads/dashboards note directly below.
+Only the weekly content cycle is a real cron (and it is inert unless auto-run is enabled) — everything else is event-triggered on demand, or (the scheduled social post publish) fired once per instance, never a recurring poll. The Meta Ads jobs (performance sync, leads sync, self-ad/competitor analysis) were removed along with the module.
 
 Every event payload carries `business_id` explicitly. Inngest functions run with the Supabase service-role key, which bypasses RLS entirely — scoping for background writes comes from the payload, never inferred from a session (there is no user session inside a background worker).
 
 
-### Leads and the dashboards call their slow third-party APIs live, on every page load — by deliberate choice
+### The dashboards call their slow third-party APIs live, on every page load — by deliberate choice
 
-This used to go the other way: the Meta Ads Leads page and the Root/Social dashboards both had a background-cache pattern — a scheduled Inngest job (every 5 minutes) was the only thing that ever called the slow external API (Meta Graph for Leads, Upload-Post analytics for the dashboards), writing the result into our own table (`leads`; `upload_post_analytics_cache` — see `database_schema.md` §2), and the page's own GET route only ever read that table.
+The Root/Social dashboards used to read a 5-minute cache table fed by a background job; that job was removed on purpose — always-fresh data was judged more valuable than avoiding the real round trip (Upload-Post ~several seconds).
 
-Both background jobs (`meta-ads-leads-sync.job.ts`, `social-analytics-cache-refresh.job.ts`) were removed on purpose — always-fresh data was judged more valuable than avoiding the real, measured round trip (Meta Graph ~7-8s for Leads, Upload-Post analytics ~several seconds for the dashboards). `GET /api/meta-ads/leads` now calls `LeadsService.syncFromMeta()` before reading `leads` on every request; the Root/Social dashboard routes call `UploadPostService.getProfileAnalytics`/`getTotalImpressions` directly, no cache table involved. `syncFromMeta()` only ever upserts (never deletes), so a lead from an earlier sync stays in `leads` even if a later Graph API response happens to omit it — reading the table right after syncing already reflects both sources, not just the latest call. Both routes degrade to whatever they already have if the live call itself fails, rather than failing the whole page.
+The dashboard routes call `UploadPostService.getProfileAnalytics`/`getTotalImpressions` directly, no cache table involved, and degrade to whatever they already have if the live call fails, rather than failing the whole page.
 
 `upload_post_analytics_cache` still exists as a table (nothing currently reads or writes it) — left alone rather than dropped, since no one asked for it to be removed. That's not a universal rule, though: when a later cleanup explicitly asked to remove the (separate, unrelated) self-ad-analysis/competitor-analysis feature, `ad_analysis_reports` and its `businesses` schedule columns were actually dropped, not just orphaned — see `database_schema.md` §5. Whether to drop or just leave a removed feature's schema behind depends on what was actually asked for, not a fixed house style.
 
@@ -98,16 +93,15 @@ Every AI-facing feature in Kinetix (ad script/visual-prompt generation, social c
 
 `/dashboard` (`src/modules/dashboard/`) is the app's landing page — `/` itself is a hard redirect to it (`src/app/page.tsx`), it isn't served at `/` directly. It's the only page that reads across all three product modules in one request, backed by a single `GET /api/dashboard?range=` handler that aggregates:
 
-- **Meta Ads:** active campaign count, `ad_performance_daily` spend/impressions/clicks for the selected range, `leads` table count.
 - **Social:** `platform_connections` status, plus Upload-Post profile analytics/impressions called live on every request (see §2's note on Leads/dashboards calling their APIs live) — best-effort beyond that (a failed call degrades gracefully rather than failing the whole dashboard).
 
-**Total Reach** (Meta + Social impressions) is the one genuine cross-module sum. Everything else (spend, followers, leads) stays scoped to its own module.
+**Total Reach** (Social impressions) is the headline number; followers and engagement are live snapshots.
 
 The page itself: a range switcher (7d/14d/30d/90d/All — `range=all` is a capped 180-day window, not a true earliest-row lookup), a KPI row, an acquisition funnel (Reach → Clicks → Leads), two trend charts (Leads by source, Reach by channel), three per-module trend cards linking out to that module's own Dashboard, and a channel comparison table. Current-state numbers (active campaigns, "sending now," followers) are live snapshots that don't rescope with the selected range — only the trend/summary numbers do.
 
 ## 6. Shared Pagination System
 
-Every list page across all three modules (Meta Ads: Campaigns, Reports, Ad Library, Leads; Social: Posts) uses one shared pagination contract instead of each inventing its own:
+Every list page across all three modules (Social: Posts) uses one shared pagination contract instead of each inventing its own:
 
 - **`src/lib/pagination.ts`** — the only two allowed page sizes, `PAGE_SIZE_COMPACT` (10, for tables and low-density grids) and `PAGE_SIZE_DENSE` (20, for denser card/thumbnail grids) — picked per page based on roughly how many items its layout shows per viewport, never a bespoke number. Plus three helpers: `paginationMeta(total, page, limit)` (returns `{ total, page, limit, totalPages }`, floored at 1 page), `rangeFor(page, limit)` (the `[from, to]` tuple for Supabase's `.range()`), and `paginateArray(items, page, limit)` (in-memory slicing for the one list that can't be paginated at the query level — see below).
 - **`src/components/ui/Pagination.tsx`** — the one Prev/1…N…Last/Next control every paginated page renders, with page-number condensation (always page 1 and the last page, plus current±1, collapsing any gap into a single "…").
@@ -120,7 +114,7 @@ Some hooks that back a *picker* rather than a *list page* deliberately stay unpa
 
 ## 7. Shared Dashboard UI Kit
 
-`src/components/global/DashboardKit.tsx` is the one file the Root Dashboard and the module dashboards (Meta Ads, Social) are built from, so they read as one product instead of four one-off designs. It exports:
+`src/components/global/DashboardKit.tsx` is the one file the Root Dashboard and the Social dashboard are built from, so they read as one product instead of four one-off designs. It exports:
 - A fixed color system (`ACCENT` — purple/blue/green/amber/red, mapped to `DESIGN.md`'s tokens) and `CHART_SERIES`, a categorical color order that's never re-picked per chart (per the dataviz convention: color follows the entity, not its rank).
 - `chartTickInterval(pointCount, targetLabels = 7)` — scales a chart's x-axis label interval to the actual number of data points, so labels never overlap regardless of how long a selected date range is (replacing an earlier fixed-threshold approach that broke down for very long ranges).
 - Layout primitives: `Card`, `SectionTitle`, `KpiTile` (compact/tint/default variants), `EmptyState`.

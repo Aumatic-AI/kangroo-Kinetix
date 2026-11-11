@@ -1,5 +1,8 @@
 import { env } from "@/config";
 
+/** Kie model id for video generation — also recorded on each content_clips row. */
+export const SEEDANCE_MODEL = "bytedance/seedance-2-5";
+
 export class KieService {
   /**
    * Pings the API once for task status (Useful for Inngest step.sleep polling)
@@ -57,7 +60,12 @@ export class KieService {
     prompt: string,
     imageSize: "9:16" | "4:5" | "16:9" | "1:1" = "4:5",
     referenceImages?: string | string[],
-    mode: "identity" | "reference" = "identity"
+    mode: "identity" | "reference" = "identity",
+    /** exactRatio: send "4:5" as-is. Kie's current docs list 4:5 as supported, but the
+     * remap to 2:3 below is kept as the default so the existing Meta Ads/Social flows
+     * don't change behavior; 2:3 is outside Instagram's feed range (0.8–1.91).
+     * outputFormat: "jpg" for social posts (Instagram requires JPEG). */
+    opts?: { exactRatio?: boolean; outputFormat?: "png" | "jpg" }
   ) {
     const referenceImageUrls = (Array.isArray(referenceImages) ? referenceImages : referenceImages ? [referenceImages] : []).filter(Boolean);
 
@@ -76,11 +84,11 @@ export class KieService {
       finalPrompt = finalPrompt.slice(0, KIE_PROMPT_MAX_CHARS);
     }
 
-    const aspectRatio = imageSize === "4:5" ? "2:3" : imageSize;
+    const aspectRatio = imageSize === "4:5" && !opts?.exactRatio ? "2:3" : imageSize;
 
     const input: Record<string, unknown> = {
       prompt: finalPrompt,
-      output_format: "png",
+      output_format: opts?.outputFormat ?? "png",
       aspect_ratio: aspectRatio,
     };
     if (referenceImageUrls.length > 0) input.image_input = referenceImageUrls;
@@ -114,41 +122,51 @@ export class KieService {
   }
 
   /**
-   * Triggers a Video Generation Task and returns the raw jobId
+   * Seedance 2.5 (Kie model SEEDANCE_MODEL = "bytedance/seedance-2-5") — used by the
+   * content automation pipeline, the only video generation in the app. The model
+   * allows 4–30 s; our pipeline always uses one 30 s clip (see content-automation/video-spec.ts). Reference images go in `reference_image_urls` (Kie allows 30; we send ≤ 9)
+   * and native audio is on by default. Returns the raw taskId; poll it with
+   * checkSingleTaskStatus.
    */
-  static async createVideoTask(prompt: string, imageUrls: string[], aspectRatio: string = "9:16", duration: string = "4") {
-    const requestBody = {
-      model: "bytedance/seedance-1.5-pro",
-      input: {
-        prompt,
-        input_urls: imageUrls,
-        aspect_ratio: aspectRatio,
-        duration: duration,
-      }
+  static async createSeedanceTask(opts: {
+    prompt: string;
+    referenceImageUrls?: string[];
+    aspectRatio?: "9:16" | "16:9" | "1:1" | "4:3" | "3:4" | "21:9" | "adaptive";
+    duration: number;
+    generateAudio?: boolean;
+    resolution?: "480p" | "720p" | "1080p";
+  }) {
+    const duration = Math.round(opts.duration);
+    if (duration < 4 || duration > 30) throw new Error(`Seedance duration must be 4–30 s, got ${opts.duration}`);
+    const input: Record<string, unknown> = {
+      prompt: opts.prompt.slice(0, 19_500),
+      aspect_ratio: opts.aspectRatio ?? "9:16",
+      resolution: opts.resolution ?? "480p",
+      duration,
+      generate_audio: opts.generateAudio ?? true,
     };
-    console.log("[KIE_REQUEST] POST createTask (video)", requestBody);
+    const refs = (opts.referenceImageUrls ?? []).filter(Boolean).slice(0, 9);
+    if (refs.length) input.reference_image_urls = refs;
+
+    const requestBody = { model: SEEDANCE_MODEL, input };
+    console.log("[KIE_REQUEST] POST createTask (seedance-2-5)", requestBody);
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.KIE_API_KEY}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.KIE_API_KEY}` },
       body: JSON.stringify(requestBody),
     });
+    const text = await response.text();
+    console.log("[KIE_RESPONSE] POST createTask (seedance-2-5)", response.status, text);
+    if (!response.ok) throw new Error(`Kie API Error: ${text}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log("[KIE_RESPONSE] POST createTask (video)", response.status, errorText);
-      throw new Error(`Kie API Error: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log("[KIE_RESPONSE] POST createTask (video)", response.status, data);
+    let data: { code?: number; msg?: string; taskId?: string; jobId?: string; id?: string; data?: { taskId?: string; jobId?: string; id?: string } };
+    try { data = JSON.parse(text); } catch { throw new Error(`Kie returned a non-JSON response: ${text.slice(0, 200)}`); }
+    // Kie reports failures with HTTP 200 and a non-200 `code` in the body.
+    if (data.code && data.code !== 200) throw new Error(`Kie API Error ${data.code}: ${data.msg || text.slice(0, 200)}`);
     const jobId = data.taskId || data.jobId || data.id || data.data?.taskId || data.data?.jobId || data.data?.id;
-
-    if (!jobId) throw new Error(`No jobId returned from Kie. Response data: ${JSON.stringify(data)}`);
-    return jobId;
+    if (!jobId) throw new Error(`No jobId returned from Kie. Response data: ${text.slice(0, 300)}`);
+    return jobId as string;
   }
 
   static async generateImage(prompt: string, imageSize: "9:16" | "4:5" = "4:5") {
@@ -163,17 +181,5 @@ export class KieService {
       return null;
     }
   }
-
-  static async generateVideo(prompt: string, imageUrls: string[], aspectRatio: string = "9:16", duration: string = "4") {
-    const jobId = await this.createVideoTask(prompt, imageUrls, aspectRatio, duration);
-    const result = await this.checkTaskStatus(jobId, 12, 20000); // Video takes longer, so 12 retries (4 mins)
-    
-    try {
-      const resultJson = JSON.parse(result.resultJson);
-      return resultJson.resultUrls?.[0] || resultJson.urls?.[0] || null;
-    } catch (e) {
-      console.error("Failed to parse Kie AI resultJson for video:", result.resultJson);
-      return null;
-    }
-  }
 }
+

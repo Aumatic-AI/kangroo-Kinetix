@@ -31,6 +31,36 @@ export class OpenAIService {
   }
 
   /**
+   * Text generation that can SEE images (GPT-4o vision). Images are passed by
+   * public URL, so OpenAI must be able to fetch them; one unreachable or
+   * unsupported image fails the whole request, which the caller handles.
+   */
+  static async generateTextWithImages(prompt: string, imageUrls: string[], systemPrompt?: string, opts?: { temperature?: number; detail?: 'low' | 'high' }) {
+    try {
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          ...imageUrls.map((url) => ({ type: 'image_url' as const, image_url: { url, detail: opts?.detail ?? ('low' as const) } })),
+        ],
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        temperature: opts?.temperature ?? 0.2,
+      });
+
+      return completion.choices[0]?.message?.content || "";
+    } catch (error) {
+      console.error("OpenAI Vision Error:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate an image using DALL-E 3 (GPT Image 1 equivalents)
    */
   static async generateImage(prompt: string) {

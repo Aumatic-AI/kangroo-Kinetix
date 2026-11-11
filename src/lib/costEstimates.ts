@@ -5,15 +5,12 @@
  * place both UI surfaces read from, so the two never drift apart.
  *
  * These are MODELED estimates from each provider's published rate card and
- * the app's own real prompt/scene sizes — not measured from actual
+ * the app's own real prompt sizes — not measured from actual
  * provider invoices (Kinetix doesn't log real per-call token/credit usage
  * today). Treat every number as directionally correct, not exact — see
  * `confidence` on each line: "reliable" inputs are small and mechanical
- * (a fixed prompt, a short narration line), "rough" is Kie's video-render
- * cost specifically, which real usage is more likely to exceed (Kie only
- * publishes 480p/720p tiers; Kinetix renders 1080x1920, above both, and
- * failed generations retry once, doubling that scene's real cost — neither
- * is counted here).
+ * (a fixed prompt, one image render). Video generation (Seedance 2.5, content
+ * automation) is not priced here.
  */
 
 export const USD_TO_INR = 95.5;
@@ -38,77 +35,31 @@ function sumRanges(ranges: CostRange[]): CostRange {
   return { minINR, maxINR, confidence };
 }
 
-/** Image ad (Meta Ads' plain Create Ad flow, and Social's image post) —
- * one OpenAI copy/prompt call + one Kie nano-banana-2 render. */
+/** AI-generated image — one OpenAI copy/prompt call + one Kie nano-banana-2 render. */
 export const IMAGE_AD_COST_INR = 4.8;
-
-/** AI Ad Studio — a separate flow from the plain Image Ad above: one
- * one-time OpenAI call per session to ask clarifying questions, then every
- * generated image AND every chat-based edit is its own Kie call (the
- * studio prompt goes straight to the image model, no OpenAI pass). */
-export const STUDIO_QUESTIONS_COST_INR = 1.22;
-export const STUDIO_IMAGE_COST_INR = 3.82;
-
-/** Video ad (Meta Ads + Social) — per real scene count, read from the
- * generated script's own line count (`ad_script.script.length` on Meta Ads
- * creatives, `metadata.script.length` on Social's `media_assets`). Split
- * into a reliable part (script + visual prompts + narration + one image
- * per scene) and the rough part (Kie's video-render cost per scene, the
- * one genuinely likely to run higher in practice). */
-export function videoAdCost(sceneCount: number): CostRange {
-  const reliable = 2.5 + 4.16 * sceneCount; // flat script + per-scene visual prompts + narration + image
-  const clipMin = 3.82 * sceneCount;
-  const clipMax = 6.69 * sceneCount;
-  return { minINR: round2(reliable + clipMin), maxINR: round2(reliable + clipMax), confidence: "rough" };
-}
 
 export interface UsageCounts {
   imageAdCount: number;
-  studioSessionCount: number;
-  studioImageCount: number; // first image + every chat edit, combined
-  /** One entry per generated video, its real scene count. */
-  videoSceneCounts: number[];
 }
 
 export interface UsageEstimate {
   imageAd: CostRange;
-  studio: CostRange;
-  video: CostRange;
   total: CostRange;
 }
 
-/** Scene count used only to show a representative per-video rate when no
- * video has actually been generated in the selected month yet — matches
- * the app's own default-duration floor, the same fallback already used for
- * a script-less row in the usage API route. */
-export const TYPICAL_VIDEO_SCENE_COUNT = 7;
-
 export interface TypicalUnitCosts {
   imageAd: CostRange;
-  studioImage: CostRange;
-  video: CostRange;
 }
 
-/** Baseline per-unit rate for each feature, independent of any real usage —
- * the fallback shown when a feature has 0 generations in the selected
- * month, so "cost per unit" is never blank just because nothing ran yet. */
+/** Baseline per-unit rate, shown when nothing has been generated in the
+ * selected month yet so "cost per unit" is never blank. */
 export function typicalUnitCosts(): TypicalUnitCosts {
   return {
     imageAd: { minINR: IMAGE_AD_COST_INR, maxINR: IMAGE_AD_COST_INR, confidence: "reliable" },
-    studioImage: { minINR: STUDIO_IMAGE_COST_INR, maxINR: STUDIO_IMAGE_COST_INR, confidence: "reliable" },
-    video: videoAdCost(TYPICAL_VIDEO_SCENE_COUNT),
   };
 }
 
 export function estimateUsageCost(counts: UsageCounts): UsageEstimate {
   const imageAd: CostRange = { minINR: round2(counts.imageAdCount * IMAGE_AD_COST_INR), maxINR: round2(counts.imageAdCount * IMAGE_AD_COST_INR), confidence: "reliable" };
-
-  const studioTotal = round2(counts.studioSessionCount * STUDIO_QUESTIONS_COST_INR + counts.studioImageCount * STUDIO_IMAGE_COST_INR);
-  const studio: CostRange = { minINR: studioTotal, maxINR: studioTotal, confidence: "reliable" };
-
-  const video = sumRanges(counts.videoSceneCounts.map(videoAdCost));
-
-  const total = sumRanges([imageAd, studio, video]);
-
-  return { imageAd, studio, video, total };
+  return { imageAd, total: sumRanges([imageAd]) };
 }

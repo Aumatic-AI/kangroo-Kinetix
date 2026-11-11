@@ -1,25 +1,19 @@
 "use client";
 import { useState } from "react";
-import { Megaphone, Share2 } from "lucide-react";
+import { Share2 } from "lucide-react";
 import { useRootDashboard, RootDashboardRange } from "../hooks/useDashboard";
 import { KpiRow } from "../components/KpiRow";
-import { AcquisitionFunnel } from "../components/AcquisitionFunnel";
-import { LeadsBySource } from "../components/LeadsBySource";
 import { ReachTrend } from "../components/ReachTrend";
 import { ModuleTrendCard } from "../components/ModuleTrendCard";
-import { ChannelTable } from "../components/ChannelTable";
 import {
   ACCENT,
   Card,
   KpiRowSkeleton,
   SectionTitleSkeleton,
-  BarRowsSkeleton,
   AreaChartSkeleton,
   ModuleCardSkeleton,
-  TableSkeleton,
 } from "@/components/global/DashboardKit";
 import { ROUTES } from "@/config/routes";
-import { FEATURES } from "@/config/features";
 
 const RANGES: { value: RootDashboardRange; label: string }[] = [
   { value: "7d", label: "7 days" },
@@ -51,73 +45,31 @@ export function DashboardPage() {
 
       {isLoading || !data ? (
         <>
-          <KpiRowSkeleton count={FEATURES.metaAds ? 6 : 4} cols="grid-cols-2 lg:grid-cols-4" compact />
+          <KpiRowSkeleton count={3} cols="grid-cols-2 lg:grid-cols-3" compact />
 
           <Card>
-            <SectionTitleSkeleton titleWidth="w-40" trailing />
-            <BarRowsSkeleton rows={3} height={170} labelWidth="w-14" />
+            <SectionTitleSkeleton titleWidth="w-36" />
+            <AreaChartSkeleton height={220} legendItems={1} />
           </Card>
 
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-5">
-            <Card>
-              <SectionTitleSkeleton titleWidth="w-36" />
-              <AreaChartSkeleton height={220} legendItems={2} />
-            </Card>
-            <Card>
-              <SectionTitleSkeleton titleWidth="w-28" trailing />
-              <AreaChartSkeleton height={220} legendItems={2} />
-            </Card>
-          </div>
-
-          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
-            {FEATURES.metaAds && <ModuleCardSkeleton />}
-            <ModuleCardSkeleton />
-          </div>
-
-          <Card className="p-0 overflow-hidden">
-            <div className="p-5 pb-0">
-              <SectionTitleSkeleton titleWidth="w-40" />
-            </div>
-            <div className="px-5 pb-5">
-              <TableSkeleton rows={3} cols={4} />
-            </div>
-          </Card>
+          <ModuleCardSkeleton />
         </>
       ) : (
         <>
           <KpiRow kpis={data.kpis} />
 
-          <AcquisitionFunnel stages={data.funnel} />
+          <ReachTrend data={data.reachTrend} />
 
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-5">
-            <LeadsBySource data={data.leadsBySource} />
-            <ReachTrend data={data.reachTrend} />
-          </div>
-
-          <div className={`grid grid-cols-1 gap-5 ${FEATURES.metaAds ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
-            {FEATURES.metaAds && <ModuleTrendCard
-              icon={Megaphone}
-              title="Meta Ads"
-              href={ROUTES.META_ADS.DASHBOARD}
-              accent={ACCENT.purple}
-              headline={data.moduleTrends.meta.headline}
-              headlineLabel={data.moduleTrends.meta.headlineLabel}
-              secondary={data.moduleTrends.meta.secondary}
-              data={data.moduleTrends.meta.data}
-            />}
-            <ModuleTrendCard
-              icon={Share2}
-              title="Social Media"
-              href={ROUTES.SOCIAL.DASHBOARD}
-              accent={ACCENT.green}
-              headline={data.moduleTrends.social.headline}
-              headlineLabel={data.moduleTrends.social.headlineLabel}
-              secondary={data.moduleTrends.social.secondary}
-              data={data.moduleTrends.social.data}
-            />
-          </div>
-
-          <ChannelTable rows={data.channelTable} />
+          <ModuleTrendCard
+            icon={Share2}
+            title="Social Media"
+            href={ROUTES.SOCIAL.DASHBOARD}
+            accent={ACCENT.green}
+            headline={data.moduleTrends.social.headline}
+            headlineLabel={data.moduleTrends.social.headlineLabel}
+            secondary={data.moduleTrends.social.secondary}
+            data={data.moduleTrends.social.data}
+          />
         </>
       )}
     </div>

@@ -9,8 +9,7 @@
    ========================================================================== */
 :root {
   /* Layout */
-  --sidebar-primary-width: 64px;
-  --sidebar-secondary-width: 240px;
+  --sidebar-width: 240px;
   --navbar-height: 56px;
 
   /* Typography */

@@ -111,23 +111,24 @@ Tailwind's own `@theme inline`-generated `rounded-lg` would compute to 10px (`va
 
 ## 6. Layout
 
-Two-tier sidebar, driven by CSS variables in `globals.css` (`--sidebar-primary-width: 64px`, `--sidebar-secondary-width: 240px`, `--navbar-height: 56px`), matching `CLAUDE.md`'s architecture description:
+One single-level sidebar, driven by CSS variables in `globals.css` (`--sidebar-width: 240px`, `--navbar-height: 56px`):
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ Navbar — 56px, border-b, spans full width                        │
-├────────┬───────────────┬──────────────────────────────────────────┤
-│ Primary│  Secondary    │                                          │
-│Sidebar │  Sidebar      │            Page content                 │
-│ 64px   │  240px        │   (max-w-4xl for list/table pages,       │
-│ icon   │  per-module   │    max-w-5xl+ for wider detail layouts,  │
-│ only,  │  tab list,    │    max-w-2xl for narrow forms)           │
-│ fixed  │  always       │                                          │
-│        │  visible      │                                          │
-└────────┴───────────────┴──────────────────────────────────────────┘
+├───────────────┬──────────────────────────────────────────────────┤
+│ Sidebar 240px │                                                  │
+│  Dashboard    │            Page content                          │
+│  CONTENT      │   (max-w-4xl for list/table pages,               │
+│   links…      │    max-w-5xl+ for wider detail layouts,          │
+│  SOCIAL       │    max-w-2xl for narrow forms)                   │
+│   links…      │                                                  │
+│  ───────────  │                                                  │
+│  Settings     │                                                  │
+└───────────────┴──────────────────────────────────────────────────┘
 ```
 
-- `PrimarySidebar` = one icon per top-level module (`PRIMARY_NAV_ITEMS` in `src/config/navigation.ts`). `SecondarySidebar` = the active module's tabs (`SECONDARY_NAV_ITEMS`), shown/hidden by the URL's pathname prefix — see `src/app/(app)/layout.tsx`.
+- `Sidebar` (`src/components/layout/Sidebar.tsx`) renders `NAV_SECTIONS` + `NAV_FOOTER_ITEMS` from `src/config/navigation.ts`. Everything is one level: links grouped under non-clickable captions (`text-xs font-medium uppercase tracking-wide text-muted`), 36px rows (`h-9`), 16px icons, active row `bg-secondary-hover text-text font-medium`. Fixed width on every page — content never shifts between areas. Labels are unique across the whole list and match each page's title. Never nest or collapse sections.
 - Standard page template (used by every module page): title (`text-2xl font-bold`) + description (`text-sm text-muted`) on the left, a single primary-colored action button top-right, `space-y-6` before content starts. See `CampaignsPage.tsx`/`LeadsPage.tsx` for the reference shape.
 - Empty states: centered text inside a `border border-dashed rounded-2xl` panel, a one-line `text-sm text-muted` message, optional small primary action below it.
 
@@ -177,14 +178,6 @@ Everything below is in `src/components/ui/`. **Check this list before writing ne
 - The shared icon-or-letter avatar, built this session. Accepts an optional `icon` (`LucideIcon`) or falls back to the first letter of `label`.
 - **Fixed style: `w-9 h-9 rounded-lg bg-secondary border border-default text-muted`** — neutral, not primary-colored, and `rounded-lg` (**not** `rounded-full`) per explicit product direction. Don't reintroduce a circular or primary-tinted avatar.
 - Use letter-fallback mode for per-record rows where each item has a distinguishing name (e.g. a lead's initial in `LeadsTable`); use a single fixed icon (not a per-row guessed icon) when every row in a table represents the same kind of thing (e.g. every row in the Leads-lists table uses the same `Users` icon, every row in the Campaigns table uses the same `Megaphone` icon) — a per-row keyword-guessed icon was tried and explicitly reverted in favor of this simpler, more consistent rule.
-
-### Breadcrumb (`breadcrumb.tsx`) — shadcn-scaffolded, built on `@base-ui/react/use-render`
-- Added for the Meta Ads Campaign/Ad Set/Ad detail pages, which replaced a single "← Back" button — since those three pages share one layout, the breadcrumb (`Campaigns / {campaign} / {ad set} / {ad}`) is what tells you which one you're actually on and lets you jump back to any ancestor level directly, not just one step back.
-- `BreadcrumbLink` renders an `<a>` by default; pass Next's `Link` via the `render` prop for real client-side navigation — `<BreadcrumbLink render={<Link href={...} />}>` (see `CampaignDetailPage.tsx`). The current page is `BreadcrumbPage` (plain text, not a link).
-- Uses shadcn's default `text-foreground`/`text-muted-foreground` classes as-is — unlike some other shadcn scaffolding in this repo, those *do* resolve correctly here (`globals.css` aliases `--foreground`/`--muted-foreground` straight to `--color-text`/`--color-text-muted`), so no manual token fixup was needed.
-
-### LevelChip (`campaigns/shared.tsx`)
-- A small neutral pill ("Campaign" / "Ad Set" / "Ad") shown next to the title on each of the three detail pages — `bg-secondary text-muted border-border`, deliberately not colored, so it's never confused with `StatusChip` (which is always semantic-colored). Exists because those three pages are visually identical enough that a quick glance needs to confirm which level you're on, alongside the breadcrumb.
 
 ### Loader (`Loader.tsx`) / Skeleton (`skeleton.tsx`)
 - `Loader`: one spinner style app-wide (primary stroke, border-color track), sizes `sm` 16px / `md` 24px / `lg` 32px. Never mix in a second spinner style.

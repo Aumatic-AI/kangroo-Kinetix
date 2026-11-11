@@ -11,28 +11,12 @@ const envSchema = z.object({
 
   // AI providers (all routed through src/services/ai/orchestrator.ts)
   OPENAI_API_KEY: z.string().optional(),
-  GEMINI_API_KEY: z.string().optional(),
-  ELEVENLABS_API_KEY: z.string().optional(),
   KIE_API_KEY: z.string().optional(),
 
   // Media rendering & publishing
-  FFMPEG_API_KEY: z.string().optional(),
+  UPLOAD_POST_API_KEY: z.string().optional(),
   UPLOAD_POST_PROFILE: z.string().optional(),
 
-
-  // Meta Graph API — Ads
-  META_ACCESS_TOKEN: z.string().optional(),
-  META_AD_ACCOUNT_ID: z.string().optional(),
-
-  // Meta Graph API — Leads (separate Page-scoped token, not the ad-account one above)
-  META_PAGE_ID: z.string().optional(),
-  META_PAGE_TOKEN: z.string().optional(),
-
-  // Meta Graph API — Conversions API for CRM (reports lead status back to Meta;
-  // the dataset itself is created once in Meta Events Manager, outside this codebase)
-  META_CONVERSIONS_DATASET_ID: z.string().optional(),
-
-  // Storage
   STORAGE_PROVIDER: z.enum(["supabase", "s3", "local"]).default("supabase"),
 
   // Background jobs (Inngest)
@@ -52,19 +36,10 @@ const _env = envSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
 
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
   KIE_API_KEY: process.env.KIE_API_KEY,
 
-  FFMPEG_API_KEY: process.env.FFMPEG_API_KEY,
+  UPLOAD_POST_API_KEY: process.env.UPLOAD_POST_API_KEY,
   UPLOAD_POST_PROFILE: process.env.UPLOAD_POST_PROFILE,
-
-
-  META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
-  META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,
-  META_PAGE_ID: process.env.META_PAGE_ID,
-  META_PAGE_TOKEN: process.env.META_PAGE_TOKEN,
-  META_CONVERSIONS_DATASET_ID: process.env.META_CONVERSIONS_DATASET_ID,
 
   STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
 

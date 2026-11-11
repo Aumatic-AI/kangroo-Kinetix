@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Loader } from "@/components/ui/Loader";
 import { BusinessServiceInput } from "../types/settings.types";
-import { useUploadVideoReference, useUploadLogo } from "../hooks/useSettings";
+import { useUploadLogo } from "../hooks/useSettings";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -199,53 +199,7 @@ export function WeekdayToggle({ selected, onToggle }: { selected: number[]; onTo
   );
 }
 
-/** One male/female reference-photo upload slot for the Video Character
- * Reference section — uploads immediately on file pick (a real file
- * upload, not a form field, so it doesn't wait for the page's Save bar).
- * The mutation invalidates the settings query on success, so `url` (read
- * from the query's data, not the page's editable form copy) updates on
- * its own once the refetch lands — no local state to reconcile here. */
-export function VideoReferenceUploader({ gender, label, url }: { gender: "male" | "female"; label: string; url: string | null }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const uploadMutation = useUploadVideoReference();
-  const [error, setError] = useState("");
-
-  const handlePick = async (file: File | undefined) => {
-    if (!file) return;
-    setError("");
-    try {
-      await uploadMutation.mutateAsync({ gender, file });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-bold text-muted uppercase tracking-wide">{label}</label>
-      <div className="flex items-center gap-3">
-        <div className="w-16 h-16 rounded-lg border border-border bg-surface overflow-hidden shrink-0 flex items-center justify-center">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <Upload className="w-4 h-4 text-muted" />
-          )}
-        </div>
-        <div className="space-y-1">
-          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploadMutation.isPending}>
-            {uploadMutation.isPending ? <Loader size="sm" /> : url ? "Replace" : "Upload"}
-          </Button>
-          {error && <p className="text-xs text-danger">{error}</p>}
-        </div>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handlePick(e.target.files?.[0])} />
-      </div>
-    </div>
-  );
-}
-
-/** Business logo upload — same upload-on-pick pattern as
- * VideoReferenceUploader, but a single slot with no gender split. Used on
+/** Business logo upload — upload-on-pick (a real file upload, so it doesn't wait for the page's Save bar). Used on
  * AI Ad Studio poster-style ads when the business has one set. */
 export function LogoUploader({ url }: { url: string | null }) {
   const inputRef = useRef<HTMLInputElement>(null);

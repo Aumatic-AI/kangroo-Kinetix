@@ -1,35 +1,34 @@
 import { OpenAIService } from './providers/openai';
-import { GeminiService } from './providers/gemini';
-import { ElevenLabsService } from './providers/elevenlabs';
 import { KieService } from './providers/kie';
 
-export type TextProvider = 'openai' | 'gemini';
+export type TextProvider = 'openai';
 export type TaskType = 'text' | 'analysis';
 
 /**
  * Single entry point for every AI call in the app — no feature code should
- * import a provider service directly. Kie is the only image/video provider
+ * import a provider service directly. Kie is the only image/video provider (Seedance 2.5 video is used by content automation only)
  */
 export class AIOrchestrator {
   async executeTask(taskType: TaskType, prompt: string, provider: TextProvider = 'openai', options?: { systemPrompt?: string }): Promise<string> {
-    if (provider === 'gemini') return GeminiService.generateTextPro(prompt);
     return OpenAIService.generateText(prompt, options?.systemPrompt);
   }
 
-  createImageTask(prompt: string, imageSize?: "9:16" | "4:5" | "16:9" | "1:1", referenceImages?: string | string[], mode?: "identity" | "reference") {
-    return KieService.createImageTask(prompt, imageSize, referenceImages, mode);
+  /** Text answer about images the model can see (listing photos). Throws if an image can't be fetched. */
+  describeImages(prompt: string, imageUrls: string[], options?: { systemPrompt?: string; temperature?: number; detail?: "low" | "high" }): Promise<string> {
+    return OpenAIService.generateTextWithImages(prompt, imageUrls, options?.systemPrompt, { temperature: options?.temperature, detail: options?.detail });
   }
 
-  createVideoTask(prompt: string, imageUrls: string[], aspectRatio?: string, duration?: string) {
-    return KieService.createVideoTask(prompt, imageUrls, aspectRatio, duration);
+  createImageTask(prompt: string, imageSize?: "9:16" | "4:5" | "16:9" | "1:1", referenceImages?: string | string[], mode?: "identity" | "reference", opts?: { exactRatio?: boolean; outputFormat?: "png" | "jpg" }) {
+    return KieService.createImageTask(prompt, imageSize, referenceImages, mode, opts);
+  }
+
+  /** Seedance 2.5 video clip (30 s single / 20 s each of two) — content automation only. */
+  createSeedanceVideoTask(opts: Parameters<typeof KieService.createSeedanceTask>[0]) {
+    return KieService.createSeedanceTask(opts);
   }
 
   checkTaskStatus(jobId: string) {
     return KieService.checkSingleTaskStatus(jobId);
-  }
-
-  generateSpeech(text: string, voiceId?: string, languageCode?: string) {
-    return ElevenLabsService.generateSpeech(text, voiceId, languageCode);
   }
 }
 

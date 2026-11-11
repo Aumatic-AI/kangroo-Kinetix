@@ -9,10 +9,10 @@ import { env } from "@/config/env";
 const BASE_URL = "https://api.upload-post.com/api";
 
 function apiKey(): string {
-  // Same api.upload-post.com account/key already used for FFmpeg stitching
-  // (services/ffmpeg/client.ts) — one Upload-Post account covers both.
-  if (!env.FFMPEG_API_KEY) throw new Error("FFMPEG_API_KEY is not configured (used as the Upload-Post API key)");
-  return env.FFMPEG_API_KEY;
+  // The one Upload-Post key (UPLOAD_POST_API_KEY) — also used for the FFmpeg renderer
+  // (services/ffmpeg/client.ts): one Upload-Post account covers both.
+  if (!env.UPLOAD_POST_API_KEY) throw new Error("UPLOAD_POST_API_KEY is not configured");
+  return env.UPLOAD_POST_API_KEY;
 }
 
 function authHeader(): Record<string, string> {

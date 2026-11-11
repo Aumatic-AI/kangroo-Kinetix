@@ -23,12 +23,12 @@ export class FFmpegService {
   private static API_URL = "https://api.upload-post.com/api/uploadposts/ffmpeg";
 
   static getHeaders() {
-    if (!env.FFMPEG_API_KEY) {
-      throw new Error("FFMPEG_API_KEY is not set");
+    if (!env.UPLOAD_POST_API_KEY) {
+      throw new Error("UPLOAD_POST_API_KEY is not set");
     }
     return {
       "Content-Type": "application/json",
-      "Authorization": env.FFMPEG_API_KEY
+      "Authorization": env.UPLOAD_POST_API_KEY
     };
   }
 
@@ -120,9 +120,11 @@ export class FFmpegService {
       };
     }
 
+    // The renderer reports failures in `exc_info` (a Python traceback); its last line is the actual error.
+    const excLine = typeof data.exc_info === "string" ? data.exc_info.trim().split("\n").pop() : undefined;
     return {
       status: data.status,
-      error: data.error
+      error: data.error || excLine
     };
   }
 }
