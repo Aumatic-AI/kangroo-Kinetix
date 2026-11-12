@@ -11,9 +11,9 @@
  */
 import {
   AWARENESS_LEVELS, DESIRES, LEVERS, LINKEDIN_FRAMEWORKS, LINKEDIN_HOOK_TYPES, OBJECTIVES,
-  MIN_NAMED_DETAILS, NARRATION_WORDS_PER_SECOND, SAFE_CAMERA_MOVES, VOICE_DIRECTION, VOICE_MOODS, NARRATION_STYLE_EXAMPLES, type VoiceMood, VIDEO_MAX_NARRATION_WORDS, VIDEO_MIN_NARRATION_WORDS, SOCIAL_FRAMEWORKS, SOCIAL_HOOK_TYPES, personaOptions, type SlotCreative,
+  MIN_NAMED_DETAILS, NARRATION_WORDS_PER_SECOND, NARRATION_FILLER_EXAMPLES, SHOT_MIN_SECONDS, SHOT_MAX_SECONDS, SAFE_CAMERA_MOVES, VOICE_DIRECTION, VOICE_MOODS, NARRATION_STYLE_EXAMPLES, type VoiceMood, VIDEO_MAX_NARRATION_WORDS, VIDEO_MIN_NARRATION_WORDS, SOCIAL_FRAMEWORKS, SOCIAL_HOOK_TYPES, personaOptions, type SlotCreative,
 } from "@/services/content-automation/strategy";
-import { AUTO_FAIL_CODES, BRIEF_DIMENSIONS, BRIEF_PASS_SCORE, INVENTED_CATEGORIES } from "@/services/content-automation/qa";
+import { AUTO_FAIL_CODES, BRIEF_DIMENSIONS, BRIEF_PASS_SCORE, INVENTED_CATEGORIES, NARRATION_ISSUE_SCORE } from "@/services/content-automation/qa";
 
 export interface PropertyFacts {
   title: string;
@@ -123,18 +123,14 @@ CAPTIONS: one message. Instagram: the hook line first (the first 125 characters 
 
 /** Physics, camera and realism craft for the Seedance shot (§8), adapted to filming a real listing. */
 const VIDEO_CRAFT = `VIDEO — one continuous 30-second clip, filmed-looking, faithful to the reference photos:
-- Plan 3–6 beats that tile 0–30 s exactly (each beat starts where the last ended). Beat 1 is the hook and ends by 3 s: the camera is already moving on frame one and something changes or resolves within 3 s. Later beats deliver a small new payoff every few seconds; hold the payoff 1 s longer at the end.
+- Plan 5–6 beats that tile 0–30 s exactly (each beat starts where the last ended). Beat 1 is the hook and ends by 3 s: the camera is already moving on frame one and something changes or resolves within 3 s. Every later beat lasts ${SHOT_MIN_SECONDS}–${SHOT_MAX_SECONDS} s (code checks this) — use this timing unless the story really needs another: 0–3, 3–8, 8–13, 13–18, 18–24, 24–30 s (the hook, four 5 s shots, then two 6 s shots, so the closing shot has room for the invite to book). Later beats deliver a small new payoff every few seconds.
 - Each beat: ONE camera move from: ${SAFE_CAMERA_MOVES.join(" | ")} and ONE clear physical action with its cause (a hand sets down a cup, sunlight shifts across the table, a door swings open to the room).
 - The camera stays INSIDE the photographed space. No pull-outs, drone, crane-ups, orbits, whip pans or fly-throughs — they reveal rooms and exteriors nobody has seen, which is an invented feature.
 - Name a real rig (gimbal, slider on a table, tripod, handheld operator). Real time, no slow motion. One light direction and colour temperature throughout. Gravity, weight and contact are real; nothing floats or morphs. Lived-in, real materials — never "flawless, 8K, hyper-detailed".
 - THE VENUE IS THE SUBJECT. YOU DECIDE, SHOT BY SHOT, whether people appear — set "people" on every beat from your script and direction: "none" for a clean shot of the empty space (the reveal, architecture, light, layout, details, the setup before guests arrive), "background_guests" when the script shows the space in use. Choose what serves the story: e.g. a clean reveal and tour ending on the room in use; clean shots throughout for a calm, premium feel; or the space in use throughout for a lively event. A clean beat's action must not mention people. Background guests are few, small in frame and mid-activity (walking through, setting a glass down, looking around the room) — never in close-up, never the focus, never looking into the camera, and they NEVER speak, chat, toast, sing or lip-sync. Never zoom or push in on people.
-- EVERY VIDEO IS A NARRATED PROMO, written SHOT BY SHOT: give every beat a "line" — the words the narrator speaks DURING that shot, about ${NARRATION_WORDS_PER_SECOND} words per second of the shot (a 7 s shot ≈ 16 words, an 8 s shot ≈ 18 words). The first shot's line is the spoken hook: keep it to 10 words or fewer. Code joins the lines into the voice-over, which must total ${VIDEO_MIN_NARRATION_WORDS}–${VIDEO_MAX_NARRATION_WORDS} words, so fill every shot. ONE off-screen narrator in Kangrooo's brand voice speaks it. Each line describes what is ON SCREEN in that shot. The voice-over opens with the hook, then walks the viewer through the space NAMING at least ${MIN_NAMED_DETAILS} of your "space_details" in the order the shots show them (code checks this), says what the space suits (the event type you chose), and closes by inviting viewers to book it on Kangrooo. Concrete beats generic: "a stage with an LED screen and purple lights" — never "a vibrant space where every detail is perfect". Third person or "you" — never a personal experience ("I hosted…", "we loved…"). No prices, capacity, sizes, ratings or availability. Pace the narration to the beats: the words should match what is on screen at that moment.
+- EVERY VIDEO IS A NARRATED PROMO: one off-screen narrator talks the viewer through the space. Give every beat a "line": a plain DRAFT of what the narrator says around that shot — what's on screen and what the viewer would do with it. A dedicated writer turns your drafts into the final voice-over, so keep them simple and factual rather than polished. The voice-over is unhurried (about ${NARRATION_WORDS_PER_SECOND} words a second, ${VIDEO_MIN_NARRATION_WORDS}–${VIDEO_MAX_NARRATION_WORDS} words in total), names at least ${MIN_NAMED_DETAILS} of your "space_details" in the order the shots show them, says what the space suits (the event type you chose), and ends by inviting viewers to book it on Kangrooo. It is spoken, so it never says "POV", "Imagine", "Picture this" or "Welcome to", and never uses camera words (zoom, pan, dolly, tilt, camera) — code checks both. Concrete beats generic: "a stage with an LED screen and purple lights", never "a vibrant space". Third person or "you", never a personal experience ("I hosted…"). No prices, capacity, sizes, ratings or availability.
 - THE NARRATOR'S VOICE FITS THE MOOD OF YOUR SCRIPT — choose "voice.mood": "professional" for corporate and professional spaces (meetings, offices, workshops, conferences, coworking — a normal, assured voice); "friendly" when the mood is light (birthdays, casual get-togethers, showers, family celebrations — warm, with a smile in it); "calm" for intimate or quiet moods (dinners, weddings, wellness, a creative studio); "lively" for high-energy fun (parties, nightlife, dance). Optionally add "voice.delivery": one short note on how to say it (e.g. "a smile on the hook, slower on the final invite").
-- WRITE THE LINES TO BE SPOKEN, in that voice — they must sound like a real person talking, not a listing being read out: contractions (it's, you'll, there's), short sentences, everyday words, one idea per line, and a natural turn of phrase that suits the mood (a friendly script can be playful; a professional one stays plain and assured). Talk TO the viewer about what they'd do there, not about objects in the third person. Never brochure language ("boasts", "featuring a", "nestled", "equipped with", "offers a", "amenities", "whether you're", "adds a … touch", "casts a warm glow" — code checks this) and no ad-speak (perfect, unforgettable, magic, stunning, amazing, vibrant, special, dream, elevate — code checks this too). Friendly means warm and a little playful, not cheesy. Never mention people laughing, cheering, chatting, singing or toasting — the video model may add those voices. Say it in your head: if it sounds like an ad announcer or a property listing, rewrite it.
-  Style only — write your own lines; reusing these examples' wording is rejected by code:
-  Read out (weak): "${NARRATION_STYLE_EXAMPLES.weak}"
-  Spoken, professional (strong): "${NARRATION_STYLE_EXAMPLES.professional}"
-  Spoken, friendly (strong): "${NARRATION_STYLE_EXAMPLES.friendly}"
+- Keep the drafts free of brochure language ("boasts", "featuring a", "nestled", "equipped with", "offers a", "amenities", "whether you're"), ad-speak (perfect, unforgettable, magic, stunning, amazing, vibrant, special, dream, elevate) and filler (${NARRATION_FILLER_EXAMPLES}) — code checks all three. Never mention people laughing, cheering, chatting, singing or toasting: the video model may add those voices.
 - "sound" is ONLY music and room tone under the narration (e.g. "warm, light acoustic music, soft room tone"). The narrator is the ONLY voice — no chatter, conversation, crowd, laughter, applause or singing in the sound or in any beat.
 - No text, captions, titles, logos or signage in the video — it is text-free.`;
 
@@ -173,7 +169,7 @@ Return JSON exactly in this shape:
     "angle": "one sentence",
     "framework": "${SOCIAL_FRAMEWORKS.join(" | ")}",
     "levers": ["1–3 of: ${LEVERS.join(", ")}"],
-    "hook_candidates": [ { "hook_type": "${SOCIAL_HOOK_TYPES.join(" | ")}", "line": "...", "score": 1-5 } ],
+    "hook_candidates": [ { "hook_type": "${SOCIAL_HOOK_TYPES.join(" | ")}", "line": "...", "score": 1-5 }, { "hook_type": "<a different type>", "line": "...", "score": 1-5 }, { "hook_type": "...", "line": "...", "score": 1-5 } ]  (AT LEAST 3 candidates, at most 6, covering at least 2 hook types — code checks this),
     "hook": { "hook_type": "...", "visual": "frame one and its motion", "line": "the chosen hook line (caption opener / narration opener)" },
     "payoff": "how the creative pays off the hook's promise"
   },
@@ -192,7 +188,7 @@ Return JSON exactly in this shape:
     "shot": {
       "rig": "e.g. gimbal operator walking slowly",
       "framing": "what stays stable, e.g. horizon level, eye height",
-      "beats": [ { "start_s": 0, "end_s": 3, "camera_move": "${SAFE_CAMERA_MOVES.join(" | ")}", "camera_detail": "start, speed curve and end of the move", "action": "ONE physical action with its cause", "people": "none" | "background_guests", "line": "the narration spoken during THIS shot (~${NARRATION_WORDS_PER_SECOND} words per second of the shot)" } ],
+      "beats": [ { "start_s": 0, "end_s": 3, "camera_move": "${SAFE_CAMERA_MOVES.join(" | ")}", "camera_detail": "start, speed curve and end of the move", "action": "ONE physical action with its cause", "people": "none" | "background_guests", "line": "plain draft of what the narrator says around THIS shot (~${NARRATION_WORDS_PER_SECOND} words per second)" } ],
       "subject": "what the shot is about, matching the reference photos",
       "environment": "the real space as photographed, lived-in details, time of day",
       "light": "key light direction, quality, colour temperature",
@@ -239,7 +235,7 @@ Return JSON exactly in this shape:
     "awareness_level": "${AWARENESS_LEVELS.join(" | ")}", "objective": "${OBJECTIVES.join(" | ")}",
     "angle": "one sentence", "framework": "${LINKEDIN_FRAMEWORKS.join(" | ")}",
     "levers": ["1–3 of: ${LEVERS.join(", ")}"],
-    "hook_candidates": [ { "hook_type": "${LINKEDIN_HOOK_TYPES.join(" | ")}", "line": "...", "score": 1-5 } ],
+    "hook_candidates": [ { "hook_type": "${LINKEDIN_HOOK_TYPES.join(" | ")}", "line": "...", "score": 1-5 }, { "hook_type": "<a different type>", "line": "...", "score": 1-5 }, { "hook_type": "...", "line": "...", "score": 1-5 } ]  (AT LEAST 3 candidates, at most 6, covering at least 2 hook types — code checks this),
     "hook": { "hook_type": "...", "visual": "", "line": "the post's first line" },
     "payoff": "how the post pays off the first line"
   },
@@ -429,6 +425,8 @@ export function getBriefReviewPrompt(args: {
   planJson: string;
   /** The agent's own list of what the photos show — checked one by one against numbered photos. */
   spaceDetails?: string[];
+  /** A video plan: the voice-over is also scored, separately and advisory (NARRATION_ISSUE_SCORE). */
+  video?: boolean;
 }) {
   const dims = Object.entries(BRIEF_DIMENSIONS).map(([k, d]) => `- ${k} (${Math.round(d.weight * 100)}%): ${DIMENSION_GUIDE[k as keyof typeof BRIEF_DIMENSIONS]}`).join("\n");
   const system = `You are a strict creative QA lead and brand-safety reviewer for Kangrooo, a Canadian marketplace for booking spaces and venues. You review ONE planned ${args.pipeline === "linkedin" ? "LinkedIn post (text + one image)" : "short-form social creative (image or 30-second video) for TikTok, Instagram and Facebook"} BEFORE anything is generated. You score it against the rubric, fail anything untrue or non-compliant, and give one concrete fix per issue. ${DATA_NOTE} Respond with a single valid JSON object only.`;
@@ -442,7 +440,15 @@ These are ALLOWED and are never "invented_feature": portable things guests bring
 RUBRIC — score each 0–10 (10 = excellent):
 ${dims}
 
-AUTOMATIC FAILS — list one only when it clearly applies, with the exact reason:
+${args.video ? `NARRATION — score the voice-over separately as "narration" (0–10). It's in the AUDIO section; Seedance voices it as one continuous take over the shots.
+- Would a real host say this, out loud, to one person on a walk-through? Or does it read like a listing, an ad or a list of captions? Quote any phrase that sounds written.
+- Is it unhurried? About ${NARRATION_WORDS_PER_SECOND} words a second, ${VIDEO_MIN_NARRATION_WORDS}–${VIDEO_MAX_NARRATION_WORDS} words for 30 s. Crammed means low.
+- Does it open the way a person starts talking (a question, a direct line, an observation) — not "POV", "Imagine" or an announcer's "Welcome to"?
+- Does it name real, specific things and what the viewer would do with them, in roughly the order the shots show them, rather than filler (${NARRATION_FILLER_EXAMPLES})?
+- No camera words, no signs read aloud, and a short, natural invite to book at the end — not a stock phrase.
+This score is recorded for the team and does not decide pass/fail. When it is below ${NARRATION_ISSUE_SCORE}, add an issue with "dimension": "narration" that quotes the weak line(s) and gives a rewritten line as the fix.
+
+` : ""}AUTOMATIC FAILS — list one only when it clearly applies, with the exact reason:
 ${AUTO_FAIL_CODES.map((c) => `- ${c}: ${AUTO_FAIL_GUIDE[c]}`).join("\n")}
 
 <plan>
@@ -457,6 +463,8 @@ Base your faithfulness judgement on this check — don't call a detail missing i
 {
   ${args.spaceDetails?.length ? `"detail_checks": [ { "detail": "<as listed>", "photo": <1-${args.photoCount}> | null } ],
   ` : ""}"scores": { ${Object.keys(BRIEF_DIMENSIONS).map((k) => `"${k}": 0-10`).join(", ")} },
+  ${args.video ? `"narration": 0-10,
+  ` : ""}
   "auto_fails": [ { "code": "<one of the codes above>", "element": "the exact words from the plan", "category": "for invented_feature only: ${INVENTED_CATEGORIES.join(" | ")}", "reason": "what exactly breaks it" } ],
   "issues": [ { "dimension": "<rubric key>", "problem": "one sentence", "fix": "one concrete fix" } ]
 }
@@ -518,50 +526,67 @@ Return empty arrays when everything is fine.`;
 }
 
 /**
- * A focused rewrite of ONLY the per-shot narration lines, used when a video plan is fine except
- * for its narration (too short, a line too long, too few real details named). Seen live: gpt-4o
- * kept writing 26–47 words and length feedback inside the long planning prompt made it shorter.
+ * The NARRATION WRITER: every video's voice-over is written by this focused call, after the planner has
+ * fixed the shots — the planner's own lines are only a draft. It also fixes a voice-over that failed a
+ * check (`problems`). Before 2026-11-12 the planner wrote the final lines inside its long prompt, each
+ * pinned to its shot and opening with the caption hook word for word, which read like a list of captions
+ * ("POV: Your voice unleashed…", "These professional mics are set to capture your every thought").
  */
-export function getNarrationRewritePrompt(args: {
+export function getNarrationWriterPrompt(args: {
   property: PropertyFacts;
   spaceDetails: string[];
+  /** The caption's hook — the idea to open on, said the way a person would. */
   hook: string;
-  /** Also rewrite the hook (it named no real detail or used hype). */
+  /** Also write a new caption hook (it named no real detail or used hype). */
   rewriteHook?: boolean;
   hookType?: string;
   persona?: string;
-  /** The narrator's voice the plan chose — the lines are written to suit it. */
+  eventType?: string;
+  /** The narrator's voice the plan chose — the lines are written for that person. */
   voiceMood?: VoiceMood;
-  beats: { start_s: number; end_s: number; action: string; people: string; line: string; target: number; max: number }[];
+  beats: { start_s: number; end_s: number; action: string; people: string }[];
   minWords: number;
   maxWords: number;
   minDetails: number;
-  problems: string;
+  /** Set when fixing a voice-over that failed a check or the critic; null for the first write. */
+  problems: string | null;
+  /** The voice-over being fixed (with `problems`). */
+  current?: string | null;
 }) {
-  const system = `You write the voice-over for a 30-second vertical promo video of a venue listed on Kangrooo (a Canadian marketplace for booking spaces). One off-screen narrator: ${args.voiceMood && VOICE_DIRECTION[args.voiceMood] ? VOICE_DIRECTION[args.voiceMood] : "a natural, warm voice"}. Write lines that sound like that person talking, never like a listing read out. You only rewrite the narration lines, one per shot.
-BANNED WORDS — code rejects the whole voice-over if any appears, in any form: perfect, perfectly, unforgettable, memorable, magic, magical, stunning, amazing, incredible, vibrant, special, dream, elevate, ultimate, laughing, laughter, cheers, chatting, toast. Respond with a single valid JSON object only.`;
-  const user = `LISTING
+  const narrator = args.voiceMood && VOICE_DIRECTION[args.voiceMood] ? VOICE_DIRECTION[args.voiceMood] : VOICE_DIRECTION.friendly;
+  const system = `You write the voice-over for a 30-second vertical video of a real venue listed on Kangrooo, a Canadian marketplace for booking spaces. The narrator is ${narrator}. You write exactly the way that person talks out loud when showing someone around — never like an ad, a property listing or a social-media caption. Respond with a single valid JSON object only.`;
+  const user = `THE VENUE
 ${facts(args.property)}
 
-CONCRETE DETAILS VISIBLE IN THE PHOTOS: ${args.spaceDetails.join("; ")}
-${args.rewriteHook
-    ? `HOOK — REWRITE IT. Current: "${args.hook}". Write a new ${args.hookType ?? ""} hook for ${args.persona ?? "the viewer"}: at most 15 words, it MUST name one of the concrete details above, and NO hype words (perfect, unforgettable, memorable, every detail, elevate, dream, vibrant, stunning, amazing, special, "like this", "shines"). Example: "POV: your birthday dinner under white blossom trees and gold chairs." Open the first shot's line with it.`
-    : `HOOK (open with it, in the first shot): "${args.hook}"`}
+WHAT THE PHOTOS SHOW — name at least ${args.minDetails} of these, in the order the shots show them: ${args.spaceDetails.join("; ")}
+WHO IT'S FOR: ${args.persona ?? "someone looking for a space like this"}${args.eventType ? ` — ${args.eventType}` : ""}
+THE IDEA TO OPEN ON (the caption's hook): "${args.hook}" — carry its idea into your first words, said the way a person would say it out loud. Don't copy it if it reads like a caption.
+${args.rewriteHook ? `\nALSO WRITE A NEW CAPTION HOOK: the current one is weak. A ${args.hookType ?? ""} hook for ${args.persona ?? "the viewer"}, at most 15 words, naming one of the details above, no hype words (perfect, unforgettable, memorable, every detail, elevate, dream, vibrant, stunning, amazing, special, "like this", "shines"). It's written text for the caption, so it may be punchier than speech.\n` : ""}
+WHAT THE VIEWER SEES, IN ORDER (a guide to the order of what you mention — not one sentence per shot)
+${args.beats.map((b, i) => `${i + 1}. ${b.start_s}–${b.end_s} s: ${b.action} (${b.people === "none" ? "the empty space" : "a few guests in the background"})`).join("\n")}
 
-SHOTS — write ONE line per shot, describing what is on screen in that shot, hitting each shot's word target:
-${args.beats.map((b, i) => `${i + 1}. ${b.start_s}–${b.end_s} s (${b.people === "none" ? "clean shot of the space" : "space with a few background guests"}) — on screen: ${b.action}. Target: ${b.target} words (max ${b.max}). Current line: "${b.line}"`).join("\n")}
+WRITE one voice-over of ${args.minWords}–${args.maxWords} words — about two words a second, so it never sounds rushed. It's ONE paragraph spoken in one go, not a caption per shot: let a thought run across two things on screen, link ideas the way people do ("and", "so", "then", "which means"), and mix a longer sentence with a couple of short ones. If every sentence is the same length and about one object, it's a list — rewrite it.
 
-WHAT WAS WRONG: ${args.problems}
+HOW IT SHOULD SOUND
+- A local host talking to one person on a quick walk-through. Use "you" and contractions (it's, you'll, there's, that's), short sentences, the odd fragment, and everyday words.
+- Open with what a person would actually say first: a question, a direct line to the viewer, or a plain observation about the room. Never "POV", "Imagine", "Picture this" or "Welcome to" — code rejects them.
+- Say what they'd DO with each thing, not just that it exists. "Pull a chair up to the mics" beats "professional microphones are available".
+- Pace it with punctuation, because the narrator follows it: a full stop or comma where a person pauses, a dash for a beat. At most one exclamation mark.
+- Say what the space suits, then close with a short, plain invite to book it on Kangrooo in your own words.
+- Never use camera or editing words (zoom, pan, dolly, tilt, camera, footage, close-up), never read signs or wall text aloud, and never mention people laughing, cheering, chatting, singing or toasting — the video model may add those voices.
+- Banned, and rejected by code: brochure phrasing ("boasts", "featuring a", "nestled", "equipped with", "offers a", "amenities", "whether you're", "adds a … touch", "casts a … glow"); ad-speak (perfect, unforgettable, memorable, magic, stunning, amazing, incredible, vibrant, special, dream, elevate, ultimate, "every detail", "in style"); filler (${NARRATION_FILLER_EXAMPLES}).
+- Only what the facts and photos support: no prices, capacity, sizes, ratings, availability, urgency, or anyone's personal experience ("I hosted…"). No hashtags or emoji.
 
-RULES
-- Total ${args.minWords}–${args.maxWords} words. Hit every shot's target — do not write short lines.
-- Name at least ${args.minDetails} of the concrete details above, each in the shot that shows it.
-- The last line invites the viewer to book the space on Kangrooo.
-- Only what the facts and details support: no prices, capacity, sizes, ratings, availability, urgency, or anyone's personal experience ("I hosted…"). No words like "chat" or "conversation" — the narrator is the only voice.
-- Spoken English, the way a person actually talks: contractions (it's, you'll, there's), short sentences, everyday words, one idea per line. Talk TO the viewer about what they'd do there, not about objects in the third person. No brochure language ("boasts", "featuring a", "nestled", "equipped with", "offers a", "amenities", "whether you're", "adds a … touch", "casts a warm glow"), no ad-speak (perfect, unforgettable, magic, stunning, amazing, vibrant, special, dream, elevate), and never mention people laughing, cheering, chatting, singing or toasting. No hashtags, no emoji.
-  Style only, never reuse this wording — read out (weak): "${NARRATION_STYLE_EXAMPLES.weak}" Spoken (strong): "${NARRATION_STYLE_EXAMPLES[args.voiceMood === "friendly" || args.voiceMood === "lively" ? "friendly" : "professional"]}"
-- Hit the word targets with MORE spoken detail, not longer sentences: add a second short sentence about what the viewer would do there.
+TONE EXAMPLE — a made-up venue, for the sound only. Never reuse its words (code checks):
+Read out (bad): "${NARRATION_STYLE_EXAMPLES.weak}"
+Spoken (good): "${NARRATION_STYLE_EXAMPLES.full}"
+${args.problems ? `
+THE LAST VERSION HAD THESE PROBLEMS — fix every one:
+${args.problems}
+${args.current ? `The last version: "${args.current}"` : ""}
+` : ""}
+Before you answer, say it in your head as that narrator. If any part sounds written, salesy or like a caption, rewrite it.
 
-Return JSON exactly: { ${args.rewriteHook ? `"hook": "the new hook", ` : ""}"lines": ["line for shot 1", "line for shot 2", ...] } with exactly ${args.beats.length} lines.`;
+Return JSON exactly: { ${args.rewriteHook ? `"hook": "the new caption hook", ` : ""}"voiceover": "the whole voice-over, one paragraph" }`;
   return { system, user };
 }

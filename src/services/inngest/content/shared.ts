@@ -3,7 +3,8 @@ import { NonRetriableError, type GetStepTools } from "inngest";
 import { env } from "@/config";
 import type { inngest } from "../client";
 import { probeMedia, type MediaProbe } from "@/services/content-automation/media-probe";
-import { brandImage, videoLogo, LOGO_VERSION } from "@/services/content-automation/brand-logo";
+import { brandImage, videoLogo, renderEndCard, LOGO_VERSION } from "@/services/content-automation/brand-logo";
+import { END_CARD_VERSION } from "@/services/content-automation/video-spec";
 
 /** Service-role client (bypasses RLS), per the Inngest-job convention in CLAUDE.md. */
 export const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -100,6 +101,14 @@ export async function ensureVideoLogo(businessId: string, videoWidth: number): P
   const { error } = await supabase.storage.from("business_media").upload(path, logo.png, { contentType: "image/png", upsert: true });
   if (error) throw new Error(`logo upload failed: ${error.message}`);
   return { url: supabase.storage.from("business_media").getPublicUrl(path).data.publicUrl, offset: logo.offset };
+}
+
+/** The end-card PNG (white logo on black) at the video's size, uploaded once to business_media like the corner logo. */
+export async function ensureEndCard(businessId: string, width: number, height: number): Promise<{ url: string }> {
+  const path = `${businessId}/brand/kangrooo-endcard-${END_CARD_VERSION}-${LOGO_VERSION}-${width}x${height}.png`;
+  const { error } = await supabase.storage.from("business_media").upload(path, await renderEndCard(width, height), { contentType: "image/png", upsert: true });
+  if (error) throw new Error(`end card upload failed: ${error.message}`);
+  return { url: supabase.storage.from("business_media").getPublicUrl(path).data.publicUrl };
 }
 
 export function kieResultUrl(status: { resultJson?: string }): string | null {

@@ -118,7 +118,8 @@ export interface ContentDetail {
 }
 
 export interface RevisionQa {
-  brief: { score: number; passed: boolean; rounds: number; issues: { dimension: string; problem: string; fix: string }[] } | null;
+  /** `narration`: the critic's advisory voice-over score (video only), never part of pass/fail. */
+  brief: { score: number; passed: boolean; rounds: number; narration: number | null; issues: { dimension: string; problem: string; fix: string }[] } | null;
   media: { status: "passed" | "failed" | "unavailable" | "skipped"; blockers: string[]; warnings: string[]; reason?: string } | null;
   assignment: { objective: string; framework: string; hookType: string } | null;
   /** Set on a revision the pipeline re-rendered after a failed media check. */

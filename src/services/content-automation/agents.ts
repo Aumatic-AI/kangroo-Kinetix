@@ -2,7 +2,7 @@ import { z } from "zod";
 import { findUnsupportedClaims } from "./claims";
 import { hookSchema } from "./image-text";
 import { VIDEO_FORMAT, VIDEO_TOTAL_SECONDS } from "./video-spec";
-import { MIN_NAMED_DETAILS, buildVideoPrompt, hookProblems, hookSimilarity, linkedinStrategySchema, namedDetails, peopleSchema, shotPeople, socialStrategySchema, spaceDetailsSchema, videoShotSchema } from "./strategy";
+import { MIN_NAMED_DETAILS, buildVideoPrompt, hookProblems, linkedinStrategySchema, namedDetails, peopleSchema, shotPeople, socialStrategySchema, spaceDetailsSchema, videoShotSchema } from "./strategy";
 
 /**
  * Parsing + validation of the AI agents' JSON, and the deterministic checks
@@ -65,12 +65,9 @@ export const socialAgentSchema = z.object({
   if (v.content_type === "video" && !v.video) ctx.addIssue({ code: "custom", message: "video content needs a video shot" });
   for (const message of hookProblems(v.strategy.hook.line, v.space_details)) ctx.addIssue({ code: "custom", message });
   if (v.video) {
-    // The narrator SAYS the hook first (seen live: the hook was only in the caption).
-    const first = [...v.video.shot.beats].sort((a, b) => a.start_s - b.start_s)[0]?.line || v.video.shot.narration.split(/(?<=[.!?])\s/)[0] || "";
-    const hook = v.strategy.hook.line;
-    if (!first.toLowerCase().includes(hook.toLowerCase().replace(/[.!?]+$/, "")) && hookSimilarity(first, hook) < 0.5) {
-      ctx.addIssue({ code: "custom", message: `the narration's first shot line must open with the hook "${hook}" — the narrator says the hook first` });
-    }
+    // The caption opens with the written hook; the narrator opens with a SPOKEN line of its own (written by
+    // the narration writer). Requiring the hook word for word put caption-speak in the voice-over (2026-11-12:
+    // "POV: Your voice unleashed…"), so only the hook's idea carries over — the critic judges the payoff.
     const named = namedDetails(v.video.shot.narration, v.space_details);
     if (named.length < MIN_NAMED_DETAILS) {
       ctx.addIssue({ code: "custom", message: `the narration must name at least ${MIN_NAMED_DETAILS} of your space_details (it names ${named.length}: ${named.join(", ") || "none"}) — describe what the photos actually show, not generic praise` });

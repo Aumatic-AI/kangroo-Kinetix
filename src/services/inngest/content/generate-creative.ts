@@ -1,5 +1,5 @@
 import { LINKEDIN_TEXT_IMAGE_SUFFIX, TEXT_CHECK_PROMPT, TEXT_CHECK_SYSTEM, parseTextRead, verifyRenderedText } from "@/services/content-automation/image-text";
-import { VIDEO_FORMAT, VIDEO_RESOLUTION, VIDEO_TOTAL_SECONDS } from "@/services/content-automation/video-spec";
+import { END_CARD_SECONDS, END_CARD_VERSION, VIDEO_FORMAT, VIDEO_HEIGHT, VIDEO_RESOLUTION, VIDEO_TOTAL_SECONDS, VIDEO_WIDTH } from "@/services/content-automation/video-spec";
 import { SEEDANCE_MODEL } from "@/services/ai/providers/kie";
 import { aiOrchestrator } from "@/services/ai/orchestrator";
 import { FFmpegService } from "@/services/ffmpeg";
@@ -12,8 +12,8 @@ import {
   type SocialAgentOutput, type LinkedInAgentOutput,
 } from "@/services/content-automation/agents";
 import {
-  HOOK_SPILL_WORDS, MIN_NAMED_DETAILS, VIDEO_MAX_NARRATION_WORDS, VIDEO_MIN_NARRATION_WORDS, assignSlotCreative, assignmentMismatches, findRepeatedHook,
-  lineBudget, lineTarget, peopleRule, VOICE_MOODS, type PeopleMode, type SlotCreative, type VoiceMood,
+  MIN_NAMED_DETAILS, VIDEO_MAX_NARRATION_WORDS, VIDEO_MIN_NARRATION_WORDS, assignSlotCreative, assignmentMismatches, findRepeatedHook,
+  peopleRule, VOICE_MOODS, type PeopleMode, type SlotCreative, type VoiceMood,
 } from "@/services/content-automation/strategy";
 import {
   MAX_BRIEF_REVISIONS, MAX_MEDIA_ATTEMPTS, briefFeedback, briefReviewSchema, decideMediaReview, mediaReviewSchema, mediaReviewUnavailable, scoreBrief,
@@ -21,10 +21,10 @@ import {
 } from "@/services/content-automation/qa";
 import { addDays, mondayOf, validateProposedSchedule, type PlannedPost, type ProposedSlot } from "@/services/content-automation/schedule";
 import {
-  getSocialAgentPrompt, getLinkedInAgentPrompt, getSchedulePrompt, getBriefReviewPrompt, getMediaReviewPrompt, getNarrationRewritePrompt,
+  getSocialAgentPrompt, getLinkedInAgentPrompt, getSchedulePrompt, getBriefReviewPrompt, getMediaReviewPrompt, getNarrationWriterPrompt,
   type PropertyFacts, type BusinessFacts, type CreativeHistory,
 } from "@/prompts/content-automation";
-import { supabase, rpc, storeRemoteMedia, withLogo, ensureVideoLogo, kieResultUrl, keepAlive, isPermanentError, PermanentGenerationError, SOCIAL_PLATFORMS, type Step } from "./shared";
+import { supabase, rpc, storeRemoteMedia, withLogo, ensureVideoLogo, ensureEndCard, kieResultUrl, keepAlive, isPermanentError, PermanentGenerationError, SOCIAL_PLATFORMS, type Step } from "./shared";
 import { generateBlog } from "./generate-blog";
 
 /**
@@ -193,6 +193,7 @@ async function generateSocialOrLinkedIn(step: Step, p: SocialParams): Promise<{ 
         const { system, user } = getBriefReviewPrompt({
           pipeline: p.pipeline, property: loaded.property, photoCount: Math.min(loaded.imageUrls.length, QA_REFERENCE_PHOTOS), planJson: JSON.stringify(planForReview(candidate), null, 2),
           spaceDetails: candidate.kind === "social" ? candidate.data.space_details : undefined,
+          video: isVideo(candidate),
         });
         let raw: string;
         try {
@@ -410,11 +411,20 @@ export async function runAgent(a: {
     return parsed.success ? { ok: true, plan: { kind: "linkedin", data: parsed.data } } : { ok: false, error: "the plan was invalid: " + issues(parsed.error) };
   }
   let parsed = socialAgentSchema.safeParse(json);
-  // The plan is fine except its voice-over: rewrite just the per-shot lines with a focused text call
-  // (far cheaper than re-planning with the photos). A rewrite can itself land a few words short or slip
-  // into brochure phrasing, so it gets a second try with what was still wrong.
+  // Every VIDEO's voice-over is written by the narration writer (one focused text call), not the planner,
+  // whose lines are only a draft. Skipped when the plan has other problems: it is re-planned anyway.
+  if (isVideoJson(json) && (parsed.success || onlyNarrationProblems(parsed.error.issues))) {
+    const written = await writeNarration(a, json, null);
+    if (written) {
+      json = written;
+      parsed = socialAgentSchema.safeParse(json);
+      if (!parsed.success) console.warn(`[CONTENT_AGENT] written narration invalid: ${issues(parsed.error)}`);
+    }
+  }
+  // A voice-over that fails a check goes back to the writer with what was wrong (far cheaper than
+  // re-planning with the photos); it gets a second try if the fix itself slips.
   for (let r = 0; r < MAX_NARRATION_REWRITES && !parsed.success && onlyNarrationProblems(parsed.error.issues); r++) {
-    const repaired = await rewriteNarration(a, json, issues(parsed.error));
+    const repaired = await writeNarration(a, json, issues(parsed.error));
     if (!repaired) break;
     json = repaired;
     parsed = socialAgentSchema.safeParse(json);
@@ -426,6 +436,17 @@ export async function runAgent(a: {
 }
 
 const MAX_NARRATION_REWRITES = 2;
+/** The voice-over a (raw or parsed) shot currently carries: its narration, or its draft lines joined in shot order. */
+function currentNarration(shot: { beats?: { start_s: number; line?: string }[]; narration?: unknown } | undefined): string {
+  if (typeof shot?.narration === "string" && shot.narration.trim()) return shot.narration.trim();
+  return [...(shot?.beats ?? [])].sort((x, y) => Number(x.start_s) - Number(y.start_s)).map((b) => b.line ?? "").join(" ").trim();
+}
+
+/** A raw (unparsed) plan that is a video with shots — the narration writer's input. */
+function isVideoJson(json: unknown): boolean {
+  const j = json as { content_type?: unknown; video?: { shot?: { beats?: unknown } } } | null;
+  return !!j && j.content_type === "video" && Array.isArray(j.video?.shot?.beats) && (j.video!.shot!.beats as unknown[]).length > 0;
+}
 const NARRATION_PROBLEM = /narration|line is \d+ words|space_details|EVERY shot|^the hook /i;
 const HOOK_PROBLEM = /^the hook /i;
 function onlyNarrationProblems(list: { message: string }[]): boolean {
@@ -438,50 +459,43 @@ function voiceMoodOf(v: unknown): VoiceMood | undefined {
   return (VOICE_MOODS as readonly string[]).includes(m) ? (m as VoiceMood) : undefined;
 }
 
-/** One text-only call that rewrites the shot lines to their word targets; returns the patched plan JSON, or null. */
-async function rewriteNarration(a: { loaded: Loaded }, json: unknown, problems: string): Promise<unknown | null> {
+/**
+ * One text-only call to the narration writer: writes the voice-over (problems = null) or fixes one that failed
+ * a check. Returns the patched plan JSON, or null if the answer was unusable (the plan is then left as it was).
+ */
+async function writeNarration(a: { loaded: Loaded }, json: unknown, problems: string | null): Promise<unknown | null> {
   type RawBeat = { start_s: number; end_s: number; action?: string; people?: string; line?: string };
   type RawPlan = {
-    space_details?: string[]; strategy?: { persona?: string; hook?: { line?: string; hook_type?: string } };
+    space_details?: string[]; strategy?: { persona?: string; event_type?: string; hook?: { line?: string; hook_type?: string } };
     caption?: string; platform_captions?: Record<string, string | undefined>;
     video?: { shot?: { beats?: RawBeat[]; narration?: unknown; voice?: unknown } };
   };
   const plan = json as RawPlan;
   // `problems` is "path: message; path: message" — root-level issues use the path "(root)".
-  const rewriteHook = problems.split("; ").some((m) => HOOK_PROBLEM.test(m.replace(/^\(?[\w.]*\)?: /, "")));
+  const rewriteHook = !!problems && problems.split("; ").some((m) => HOOK_PROBLEM.test(m.replace(/^\(?[\w.]*\)?: /, "")));
   const beats = plan.video?.shot?.beats;
   if (!Array.isArray(beats) || !beats.length || !Array.isArray(plan.space_details)) return null;
   const ordered = [...beats].sort((x, y) => Number(x.start_s) - Number(y.start_s));
-  const { system, user } = getNarrationRewritePrompt({
+  const { system, user } = getNarrationWriterPrompt({
     property: a.loaded.property, spaceDetails: plan.space_details, hook: plan.strategy?.hook?.line ?? "",
-    rewriteHook, hookType: plan.strategy?.hook?.hook_type, persona: plan.strategy?.persona,
+    rewriteHook, hookType: plan.strategy?.hook?.hook_type, persona: plan.strategy?.persona, eventType: plan.strategy?.event_type,
     voiceMood: voiceMoodOf(plan.video?.shot?.voice),
-    beats: ordered.map((b, i) => {
-      const sec = Number(b.end_s) - Number(b.start_s);
-      const spill = i === 0 ? HOOK_SPILL_WORDS : 0;
-      return { start_s: Number(b.start_s), end_s: Number(b.end_s), action: String(b.action ?? ""), people: String(b.people ?? "none"), line: String(b.line ?? ""), target: lineTarget(sec) + spill, max: lineBudget(sec) + spill };
-    }),
+    beats: ordered.map((b) => ({ start_s: Number(b.start_s), end_s: Number(b.end_s), action: String(b.action ?? ""), people: String(b.people ?? "none") })),
     minWords: VIDEO_MIN_NARRATION_WORDS, maxWords: VIDEO_MAX_NARRATION_WORDS, minDetails: MIN_NAMED_DETAILS, problems,
+    current: problems ? currentNarration(plan.video?.shot) : null,
   });
   try {
-    const out = parseAgentJson(await aiOrchestrator.executeTask("analysis", user, "openai", { systemPrompt: system })) as { lines?: unknown; hook?: unknown };
-    const lines = Array.isArray(out.lines) ? out.lines.map((l) => String(l).trim()).filter(Boolean) : [];
-    // Seen in a dry run: one extra line for 5 shots — fold it into the closing shot rather than waste the call.
-    if (lines.length === ordered.length + 1) lines.splice(-2, 2, `${lines[lines.length - 2]} ${lines[lines.length - 1]}`);
-    if (lines.length !== ordered.length) {
-      console.warn(`[CONTENT_AGENT] narration rewrite returned ${lines.length} usable lines for ${ordered.length} shots`);
+    const out = parseAgentJson(await aiOrchestrator.executeTask("analysis", user, "openai", { systemPrompt: system })) as { voiceover?: unknown; hook?: unknown };
+    const voiceover = typeof out.voiceover === "string" ? out.voiceover.replace(/\s+/g, " ").trim() : "";
+    if (!voiceover) {
+      console.warn("[CONTENT_AGENT] narration writer returned no voiceover");
       return null;
     }
     const oldHook = plan.strategy?.hook?.line ?? "";
     const newHook = rewriteHook && typeof out.hook === "string" ? out.hook.trim() : "";
-    // The first shot's line IS the spoken hook, which was already approved. Seen in dry runs: the rewrite
-    // paraphrased it and broke the "narrator says the hook first" check — so code keeps it word for word.
-    const hook = newHook || oldHook;
-    const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    if (hook && !bare(lines[0]).includes(bare(hook))) lines[0] = hook;
-    const lineFor = new Map(ordered.map((b, i) => [b, lines[i]]));
-    const shot = { ...plan.video!.shot!, beats: beats.map((b) => ({ ...b, line: lineFor.get(b) })) };
-    delete shot.narration;   // rebuilt from the lines by the schema
+    // The voice-over is ONE paragraph (Seedance voices it as one take); the planner's per-shot draft lines are
+    // dropped so the schema uses it as written. The spoken opener is the writer's own: only the hook's idea carries over.
+    const shot = { ...plan.video!.shot!, narration: voiceover, beats: beats.map(({ line: _draft, ...b }) => { void _draft; return b; }) };
     let patched: RawPlan = { ...plan, video: { ...plan.video, shot } };
     if (newHook) {
       // The captions open with the hook: swap it there too so copy and video agree.
@@ -523,7 +537,7 @@ function revisionFields(plan: Plan) {
     : {
         script: plan.data.script || plan.data.concept, caption: plan.data.caption, hashtags: plan.data.hashtags,
         video_format: plan.data.video ? VIDEO_FORMAT : null,
-        video_duration: plan.data.video ? plan.data.video.clips.reduce((s, c) => s + c.duration_seconds, 0) : null,
+        video_duration: plan.data.video ? plan.data.video.clips.reduce((s, c) => s + c.duration_seconds, 0) + END_CARD_SECONDS : null,
         format_reason: plan.data.video?.format_reason || plan.data.reason,
       };
 }
@@ -739,17 +753,24 @@ async function produceMedia(step: Step, a: MediaArgs): Promise<string> {
     const m = data?.metadata as { publicUrl?: string; probe?: VideoProbe } | undefined;
     return {
       url: m?.publicUrl ?? null, durationSeconds: m?.probe?.durationSeconds ?? video.clips[0].duration_seconds,
-      width: m?.probe?.width || 480, hasAudio: m?.probe?.hasAudio ?? true,
+      width: m?.probe?.width || VIDEO_WIDTH, height: m?.probe?.height || VIDEO_HEIGHT, fps: m?.probe?.fps || 24, hasAudio: m?.probe?.hasAudio ?? true,
     };
-  })) as { url: string | null; durationSeconds: number; width: number; hasAudio: boolean };
+  })) as { url: string | null; durationSeconds: number; width: number; height: number; fps: number; hasAudio: boolean };
   if (!input.url) throw new PermanentGenerationError("clip media is missing a public URL");
 
-  // The Kangrooo logo goes top-right on every video. The overlay re-encodes the clip on the renderer
-  // and writes the moov atom first (Instagram needs that), so it replaces the old faststart remux.
-  const logo = (await step.run(`${pfx}brand-logo`, async () => { await keepAlive(p); return ensureVideoLogo(p.businessId, input.width); })) as { url: string; offset: number };
+  // Branding, in ONE renderer job: the Kangrooo logo top-right, then the clip dips to black and a 1 s end
+  // card (white logo fading in on black) is appended. It re-encodes on the renderer and writes the moov
+  // atom first (Instagram needs that), so it replaces the old faststart remux.
+  const brand = (await step.run(`${pfx}brand-logo`, async () => {
+    await keepAlive(p);
+    const [logo, card] = await Promise.all([ensureVideoLogo(p.businessId, input.width), ensureEndCard(p.businessId, input.width, input.height)]);
+    return { logo, card };
+  })) as { logo: { url: string; offset: number }; card: { url: string } };
+  const brandArgs = { offset: brand.logo.offset, hasAudio: input.hasAudio, durationSeconds: input.durationSeconds, fps: input.fps };
   const branded = await runFfmpeg(step, {
-    p, contentId, revisionId, label: `${pfx}branded`, submit: () => submitBrandVideoJob(input.url!, logo.url, logo.offset, input.hasAudio),
-    output: { type: "video", mime: "video/mp4", ext: "mp4", durationSeconds: input.durationSeconds }, meta: { brandedFromClip: 1, logo: { url: logo.url, offset: logo.offset } },
+    p, contentId, revisionId, label: `${pfx}branded`, submit: () => submitBrandVideoJob(input.url!, brand.logo.url, brand.card.url, brandArgs),
+    output: { type: "video", mime: "video/mp4", ext: "mp4", durationSeconds: input.durationSeconds + END_CARD_SECONDS },
+    meta: { brandedFromClip: 1, logo: { url: brand.logo.url, offset: brand.logo.offset }, endCard: { url: brand.card.url, seconds: END_CARD_SECONDS, version: END_CARD_VERSION } },
   });
   return branded.assetId;
 }
@@ -841,7 +862,9 @@ async function finalize(step: Step, a: { p: SocialParams; plan: Plan; contentTyp
     if (probe?.kind === "video") {
       const requested = Number(rev.video_duration ?? 0);
       if (requested && Math.abs(probe.durationSeconds - requested) > 2) warnings.push(`measured ${probe.durationSeconds}s vs ${requested}s requested`);
-      if (Math.abs(probe.durationSeconds - VIDEO_TOTAL_SECONDS) > 2) mediaProblems.push(`video should be ${VIDEO_TOTAL_SECONDS} s but is ${probe.durationSeconds} s`);
+      // The 30 s clip plus the appended end card.
+      const expected = VIDEO_TOTAL_SECONDS + END_CARD_SECONDS;
+      if (Math.abs(probe.durationSeconds - expected) > 2) mediaProblems.push(`video should be ${expected} s but is ${probe.durationSeconds} s`);
     }
 
     const posts = plan.kind === "social"

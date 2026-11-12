@@ -95,7 +95,7 @@ test("socialAgentSchema: accepts image and video plans, normalises hashtags and 
   assert.equal(v.people, "background_guests");                                       // derived from the shots, not the top-level field
   assert.match(prompt, /no text, captions, titles, logos/);
   assert.match(prompt, /ONE off-screen narrator/);
-  assert.match(prompt, /narrator is the ONLY voice/);
+  assert.match(prompt, /narrator is the only voice/);
   assert.match(prompt, /Still squeezing birthdays into your living room\?/);
 });
 
@@ -113,9 +113,9 @@ test("socialAgentSchema: common camera-move names map onto the allowed list; ban
   for (const m of ["orbit", "crane", "drone"]) assert.ok(!withMove(m).success, m);
 });
 
-test("socialAgentSchema: the narrator says the hook first (seen live: the hook was only in the caption)", () => {
-  const r = socialAgentSchema.safeParse(videoPost(videoShot({ narration: "Sunlight glints off the floor-to-ceiling windows across a long wooden table. " + videoShot().narration })));
-  assert.ok(!r.success); assert.match(JSON.stringify(r.error.issues), /first shot line must open with the hook/);
+test("socialAgentSchema: the narrator opens with its own spoken line — the caption hook is not repeated word for word (2026-11-12: \"POV:\" was said aloud)", () => {
+  const spoken = videoShot().narration.replace("Still squeezing birthdays into your living room?", "So, where does the birthday go this year?");
+  assert.ok(socialAgentSchema.safeParse(videoPost(videoShot({ narration: spoken }))).success);
 });
 
 test("socialAgentSchema: a generic hook is sent back before any media is made", () => {
@@ -161,12 +161,12 @@ test("socialAgentSchema: every video is a narrated promo — narration required,
   assert.ok(!ok({ sound: "ambient chatter and light instrumental music" }).success);                                  // seen live: other voices
   const beats = videoShot().beats;
   // "chat"/"conversation" is silenced to mingling by code (seen live, it cost whole re-plans); real speech still fails
-  const silenced = ok({ beats: [beats[0], { ...beats[1], action: "guests in animated conversation by the window", people: "background_guests" }, beats[2]] });
+  const silenced = ok({ beats: [beats[0], { ...beats[1], action: "guests in animated conversation by the window", people: "background_guests" }, ...beats.slice(2)] });
   assert.ok(silenced.success); assert.equal(silenced.data.video.shot.beats[1].action, "guests mingling by the window");
-  const quiet = ok({ beats: [beats[0], beats[1], { ...beats[2], action: "The room is filled with laughter and joy." }] });   // seen live
+  const quiet = ok({ beats: [beats[0], beats[1], { ...beats[2], action: "The room is filled with laughter and joy." }, ...beats.slice(3)] });   // seen live
   assert.ok(quiet.success); assert.equal(quiet.data.video.shot.beats[2].action, "The room is lively.");
-  assert.ok(!ok({ beats: [beats[0], { ...beats[1], action: "zooming in on a small group of guests" }, beats[2]] }).success);   // seen live
-  assert.ok(!ok({ beats: [beats[0], beats[1], { ...beats[2], action: "a guest gives a toast to the room" }] }).success);
+  assert.ok(!ok({ beats: [beats[0], { ...beats[1], action: "zooming in on a small group of guests" }, ...beats.slice(2)] }).success);   // seen live
+  assert.ok(!ok({ beats: [beats[0], beats[1], { ...beats[2], action: "a guest gives a toast to the room" }, ...beats.slice(3)] }).success);
   assert.ok(ok({}).success);
 });
 

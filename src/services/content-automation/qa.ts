@@ -29,6 +29,14 @@ export type BriefDimension = keyof typeof BRIEF_DIMENSIONS;
 const DIMENSION_KEYS = Object.keys(BRIEF_DIMENSIONS) as [BriefDimension, ...BriefDimension[]];
 
 export const BRIEF_PASS_SCORE = 7;
+/**
+ * VIDEO plans only: the critic also scores the voice-over 0–10. ADVISORY — recorded and shown in the gallery,
+ * never part of pass/fail. It was a blocking gate briefly (2026-11-12) and scored every script exactly 6/10
+ * across 9 reviews, including rewrites that fixed what it asked for, so it blocked every video without
+ * measuring anything. Narration quality is carried by the narration writer and the code checks in strategy.ts.
+ * Below this score the critic must quote the weak lines in an issue.
+ */
+export const NARRATION_ISSUE_SCORE = 7;
 /** Revisions the agent gets after a failed review (so at most 3 reviews per creative). */
 export const MAX_BRIEF_REVISIONS = 2;
 
@@ -73,6 +81,8 @@ export const briefReviewSchema = z.object({
   /** The critic's own photo check of the agent's space_details: which numbered photo shows each (null = none). */
   detail_checks: z.array(z.object({ detail: z.string().trim().min(1), photo: z.coerce.number().int().nullable().catch(null) })).default([]),
   scores: z.object(Object.fromEntries(DIMENSION_KEYS.map((k) => [k, score])) as Record<BriefDimension, typeof score>),
+  /** Video plans only, advisory (see NARRATION_ISSUE_SCORE); absent for images and LinkedIn. */
+  narration: score.nullable().optional().catch(null),
   auto_fails: z.array(rawAutoFail).default([]),
   issues: z.array(z.object({
     dimension: z.string().trim().default(""),
@@ -115,7 +125,7 @@ export const briefReviewSchema = z.object({
   if (overruled.length && !keptIssues.some((i) => i.dimension === "faithfulness") && !keptFails.some((f) => f.code === "invented_feature")) {
     scores.faithfulness = Math.max(scores.faithfulness, 8);
   }
-  return { scores, auto_fails: keptFails, issues: keptIssues, overruled, verified_details: verified, unverified_details: unverified };
+  return { scores, narration: r.narration ?? null, auto_fails: keptFails, issues: keptIssues, overruled, verified_details: verified, unverified_details: unverified };
 });
 export type BriefReviewRaw = z.infer<typeof briefReviewSchema>;
 
@@ -123,6 +133,8 @@ export interface BriefReview {
   passed: boolean;
   score: number;
   scores: Record<BriefDimension, number>;
+  /** The voice-over score for a video plan; null when the plan has no narration. */
+  narration: number | null;
   autoFails: { code: AutoFailCode; reason: string }[];
   issues: { dimension: string; problem: string; fix: string }[];
   /** Critic complaints its own photo check contradicted (dropped). */
@@ -136,9 +148,10 @@ export function scoreBrief(raw: BriefReviewRaw): BriefReview {
   for (const k of DIMENSION_KEYS) total += raw.scores[k] * BRIEF_DIMENSIONS[k].weight;
   const rounded = Math.round(total * 10) / 10;
   return {
-    passed: rounded >= BRIEF_PASS_SCORE && raw.auto_fails.length === 0,
+    passed: rounded >= BRIEF_PASS_SCORE && raw.auto_fails.length === 0,   // the narration score is advisory
     score: rounded,
     scores: raw.scores,
+    narration: raw.narration,
     autoFails: raw.auto_fails,
     issues: raw.issues,
     overruled: raw.overruled,
@@ -152,7 +165,8 @@ export function briefFeedback(r: BriefReview): string {
   const lines = [
     `the creative review scored ${r.score}/10 (pass is ${BRIEF_PASS_SCORE}${r.autoFails.length ? " with no automatic fails" : ""}).`,
     ...r.autoFails.map((f) => `AUTOMATIC FAIL (${f.code.replace(/_/g, " ")}): ${f.reason}`),
-    ...r.issues.slice(0, 8).map((i) => `${i.dimension ? `[${i.dimension}] ` : ""}${i.problem}${i.fix ? ` → fix: ${i.fix}` : ""}`),
+    // Narration notes are for the record, not the planner: the narration writer rewrites the voice-over anyway.
+    ...r.issues.filter((i) => i.dimension !== "narration").slice(0, 8).map((i) => `${i.dimension ? `[${i.dimension}] ` : ""}${i.problem}${i.fix ? ` → fix: ${i.fix}` : ""}`),
   ];
   return lines.join("\n");
 }

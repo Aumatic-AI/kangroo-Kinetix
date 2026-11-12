@@ -1,9 +1,9 @@
 import { FFmpegService } from "@/services/ffmpeg";
-import { FRAME_GRID_COMMAND, brandVideoCommand } from "./ffmpeg-commands";
+import { FRAME_GRID_COMMAND, brandVideoCommand, type BrandVideoArgs } from "./ffmpeg-commands";
 
-/** Submits the logo overlay (+ faststart) for the Seedance clip; `logoUrl` is the pre-sized PNG from videoLogo(). */
-export function submitBrandVideoJob(clipUrl: string, logoUrl: string, offset: number, hasAudio: boolean): Promise<string> {
-  return FFmpegService.submitJob({ files: [clipUrl, logoUrl], command: brandVideoCommand(offset, hasAudio), outputExtension: "mp4" });
+/** Submits the branded ending for the Seedance clip: corner logo, dip to black, end card (+ faststart). `logoUrl`/`cardUrl` are the pre-sized PNGs. */
+export function submitBrandVideoJob(clipUrl: string, logoUrl: string, cardUrl: string, args: BrandVideoArgs): Promise<string> {
+  return FFmpegService.submitJob({ files: [clipUrl, logoUrl, cardUrl], command: brandVideoCommand(args), outputExtension: "mp4" });
 }
 
 /** Submits the frame-grid extraction (one JPEG) used by the media check. */

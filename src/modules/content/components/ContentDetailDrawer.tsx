@@ -121,6 +121,7 @@ function Body({ detail }: { detail: ContentDetail }) {
                 <p className="text-sm text-text">
                   <span className="font-medium">Creative review</span> · {rev.qa.brief.score}/10
                   {rev.qa.brief.rounds > 1 ? ` after ${rev.qa.brief.rounds} rounds` : ""}
+                  {rev.qa.brief.narration != null ? ` · narration ${rev.qa.brief.narration}/10 (advisory)` : ""}
                 </p>
               </div>
               {rev.qa.brief.issues.length > 0 && (

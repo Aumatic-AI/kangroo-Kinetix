@@ -9,7 +9,7 @@ const {
   socialStrategySchema, videoShotSchema,
 } = await import("../../src/services/content-automation/strategy.ts");
 const { getSocialAgentPrompt, getLinkedInAgentPrompt } = await import("../../src/prompts/content-automation/index.ts");
-import { socialStrategy, videoShot } from "./creative-fixtures.mjs";
+import { socialStrategy, videoShot, spaceDetails, shotLines } from "./creative-fixtures.mjs";
 
 test("personaOptions maps the real inventory's event types to a persona and one desire", () => {
   const opts = personaOptions(["Birthday Parties", "Corporate Meetings", "Podcast Recording", "Something Unknown"]);
@@ -40,9 +40,9 @@ test("buildVideoPrompt: camera first, beats in time order, people rule, text-fre
   const clean = videoShot().beats.map((b) => ({ ...b, people: "none", action: b.action.replace("background guests gather and raise glasses", "late light settles on the set table") }));
   const shot = videoShotSchema.parse(videoShot({ beats: [...clean].reverse() }));
   const p = buildVideoPrompt(shot);
-  assert.ok(p.indexOf("0–3 s") < p.indexOf("3–15 s") && p.indexOf("3–15 s") < p.indexOf("15–30 s"));
+  assert.ok(p.indexOf("0–3 s") < p.indexOf("3–9 s") && p.indexOf("3–9 s") < p.indexOf("26–30 s"));
   assert.match(p, /People: no people in the scene/);
-  assert.match(p, /ONE off-screen narrator/); assert.match(p, /no dialogue, no crowd chatter, no background conversation, no singing/);
+  assert.match(p, /ONE off-screen narrator/); assert.match(p, /The narrator is the only voice — nobody on screen speaks, and there is no other speech, singing or crowd sound/);
   assert.match(p, /no slow motion/);
   assert.match(peopleRule("background_guests"), /the venue is the subject/); assert.match(peopleRule("background_guests"), /never in close-up/);
 });
@@ -53,12 +53,12 @@ test("people are decided per shot: clean shots, the space in use, or a mix — t
   assert.equal(shotPeople(mixed), "background_guests");
   const p = buildVideoPrompt(mixed);
   assert.match(p, /0–3 s .*People: none — a clean shot of the empty space/);
-  assert.match(p, /15–30 s .*People: a few background guests, small in frame/);
+  assert.match(p, /9–15 s .*People: a few background guests, small in frame/);
   assert.match(p, /Shots marked "People: none" show the space with nobody in it/);
   const clean = videoShotSchema.parse(videoShot({ beats: base.map((b) => ({ ...b, people: "none", action: "light moves slowly across the empty room" })) }));
   assert.equal(shotPeople(clean), "none"); assert.match(buildVideoPrompt(clean), /People: no people in the scene/);
   // a clean shot whose action mentions people is a contradiction → sent back to the agent
-  assert.ok(!videoShotSchema.safeParse(videoShot({ beats: [base[0], { ...base[1], action: "guests walk past the window", people: "none" }, base[2]] })).success);
+  assert.ok(!videoShotSchema.safeParse(videoShot({ beats: [base[0], { ...base[1], action: "guests walk past the window", people: "none" }, ...base.slice(2)] })).success);
 });
 
 test("space details: concrete only, and the narration must name them (seen live: 38 generic words)", () => {
@@ -72,34 +72,30 @@ test("space details: concrete only, and the narration must name them (seen live:
   assert.equal(namedDetails(concrete, aviva).length, 4);
 });
 
-test("narration written per shot: lines are joined in shot order, budgeted per shot, and carried on each timeline line", () => {
-  const lines = [
-    "Still squeezing birthdays into your living room?",                                                          // 0–3 s (7 words)
-    "Step inside. Floor-to-ceiling windows pour afternoon light across a long wooden table, while exposed brick runs the whole length of the room.",   // 3–15 s
-    "The polished concrete floor leaves space for everyone to gather and celebrate together. It's made for birthdays that need room to breathe. Find this loft on Kangrooo and book your date.",   // 15–30 s
-  ];
+test("narration written per shot, voiced as ONE continuous take: parts joined in shot order, capped per shot, not pinned to timestamps", () => {
+  const lines = shotLines;
   const base = videoShot({ narration: undefined });
   const beats = base.beats.map((b, i) => ({ ...b, line: lines[i] }));
   const shot = videoShotSchema.parse({ ...base, beats: [...beats].reverse() });
   assert.equal(shot.narration, lines.join(" "));                                                                // joined in time order
   const p = buildVideoPrompt(shot);
-  assert.match(p, /0–3 s .*Narration: "Still squeezing birthdays into your living room\?"/);
-  assert.match(p, /speaks the narration line given for each shot, during that shot/);
+  assert.match(p, /speaks this voice-over as a single continuous take, loosely following the shots in order/);
+  assert.match(p, /finishing by about 28 seconds: "Still squeezing birthdays into your living room\? Step inside/);
+  assert.doesNotMatch(p, /\d+–\d+ s — .*Narration:/);                                                          // 2026-11-12: per-shot pinning sounded mechanical
   const tooLong = beats.map((b, i) => (i === 0 ? { ...b, line: "word ".repeat(15).trim() } : b));               // 15 words in 3 s
-  assert.match(JSON.stringify(videoShotSchema.safeParse({ ...base, beats: tooLong }).error.issues), /at most 12/);   // 9 + 3 hook spill
-  const hookFits = beats.map((b, i) => (i === 0 ? { ...b, line: "POV: your birthday dinner under white blossom trees and gold chairs." } : b));   // 11 words, seen live
-  assert.ok(!JSON.stringify(videoShotSchema.safeParse({ ...base, beats: hookFits }).error?.issues ?? "").includes("beat 1's line"));
+  assert.match(JSON.stringify(videoShotSchema.safeParse({ ...base, beats: tooLong }).error.issues), /at most 13/);   // 6 + 4 slack + 3 hook spill
   const partial = beats.map((b, i) => (i === 1 ? { ...b, line: "" } : b));
   assert.ok(!videoShotSchema.safeParse({ ...base, beats: partial }).success);
 });
 
 test("narrator voice: chosen from the script's mood, described to Seedance as a natural person, never announcer-style", () => {
   const friendly = buildVideoPrompt(videoShotSchema.parse(videoShot()));
-  assert.match(friendly, /VOICE: a warm, friendly voice with a smile in it.*; a smile on the hook\./);
-  assert.match(friendly, /Natural human delivery, not text-to-speech/);
-  assert.doesNotMatch(friendly, /brand voice/);
+  assert.match(friendly, /VOICE: a Canadian host in their thirties showing a friend around a place they like.*; a smile on the hook\./);
+  assert.match(friendly, /Delivery: one continuous, unhurried take at about two words per second/);
+  // Positive cues only: naming the qualities to avoid ("robotic", "monotone") primed them (2026-11-12).
+  assert.doesNotMatch(friendly, /robotic|monotone|text-to-speech|announcer|brand voice/i);
   const pro = buildVideoPrompt(videoShotSchema.parse(videoShot({ voice: "Professional" })));   // a bare mood string is accepted
-  assert.match(pro, /VOICE: a natural, assured adult voice/);
+  assert.match(pro, /VOICE: a Canadian host in their thirties walking a client through the room/);
   assert.ok(!videoShotSchema.safeParse(videoShot({ voice: undefined })).success);              // the agent must choose
   assert.ok(!videoShotSchema.safeParse(videoShot({ voice: { mood: "robotic" } })).success);
 });
@@ -123,12 +119,14 @@ test("the camera-safety check reads the camera and scene, not the narration (\"p
   const n = videoShot().narration.replace("Step into this loft instead.", "Pull up a chair at the table.");
   assert.ok(videoShotSchema.safeParse(videoShot({ narration: n })).success);
   const base = videoShot().beats;
-  assert.ok(!videoShotSchema.safeParse(videoShot({ beats: [base[0], { ...base[1], camera_detail: "camera pulls back to reveal the hall" }, base[2]] })).success);
+  assert.ok(!videoShotSchema.safeParse(videoShot({ beats: [base[0], { ...base[1], camera_detail: "camera pulls back to reveal the hall" }, ...base.slice(2)] })).success);
 });
 
 test("narration may not copy the style examples word for word (seen in a dry run)", () => {
-  const copied = videoShot().narration.replace("It's made for celebrations that need room to breathe.", "And that brick wall? That's where your wonky bowls go to become real.");
-  assert.match(JSON.stringify(videoShotSchema.safeParse(videoShot({ narration: copied })).error.issues), /copies the style example/);
+  const swap = (text) => videoShot().narration.replace("It's made for birthdays that need room to breathe.", text);
+  assert.match(JSON.stringify(videoShotSchema.safeParse(videoShot({ narration: swap("And that brick wall? That's where your wonky bowls go to become real.") })).error.issues), /copies the style example/);
+  // the full-length example the narration writer sees is guarded too
+  assert.match(JSON.stringify(videoShotSchema.safeParse(videoShot({ narration: swap("This is where your team's afternoon gets messy, in a good way.") })).error.issues), /copies the style example/);
   assert.ok(videoShotSchema.safeParse(videoShot()).success);   // the fixture's own wording is fine
 });
 
@@ -158,7 +156,7 @@ test("prompts carry the truth rules, persona hints and history, and the rejectio
   const s = getSocialAgentPrompt({ business: { name: "Kangrooo" }, property, history, feedback: "beat 1 must end by 3 s" });
   assert.match(s.system, /No testimonials/);
   assert.match(s.system, /NEVER speak/); assert.match(s.system, /EVERY VIDEO IS A NARRATED PROMO/); assert.match(s.system, /ATTACHED IMAGES/);
-  assert.match(s.system, /VOICE FITS THE MOOD OF YOUR SCRIPT/); assert.match(s.system, /WRITE THE LINES TO BE SPOKEN/);
+  assert.match(s.system, /VOICE FITS THE MOOD OF YOUR SCRIPT/); assert.match(s.system, /A dedicated writer turns your drafts into the final voice-over/);
   assert.match(s.user, /"voice": \{ "mood": "professional \| friendly \| calm \| lively"/);
   assert.match(s.user, /Birthday Parties: someone planning a birthday/);
   assert.match(s.user, /Still squeezing birthdays/);
@@ -166,4 +164,37 @@ test("prompts carry the truth rules, persona hints and history, and the rejectio
   const l = getLinkedInAgentPrompt({ business: {}, property });
   assert.match(l.system, /No urgency or scarcity/);
   assert.doesNotMatch(l.user, /REJECTED/);
+});
+
+test("narration sounds spoken: no caption-speak, camera words or filler; unhurried length (2026-11-12 Podcast Studio render)", () => {
+  const withLines = (ls) => videoShot({ narration: undefined, beats: videoShot().beats.map((b, i) => ({ ...b, line: ls[i] })) });
+  const ok = videoShotSchema.safeParse(withLines(shotLines));
+  assert.ok(ok.success, ok.success ? "" : ok.error.issues.map((i) => i.message).join("; "));
+  const fails = (ls, re) => {
+    const r = videoShotSchema.safeParse(withLines(ls));
+    assert.ok(!r.success && r.error.issues.some((i) => re.test(i.message)), String(re));
+    // Every narration problem is phrased so the narration writer (not a full re-plan) fixes it.
+    for (const i of r.error.issues) assert.match(i.message, /narration|line is \d+ words/);
+  };
+  fails(shotLines.map((l, i) => (i === 0 ? "POV: your birthday in a sunlit loft." : l)), /caption-speak \("POV"\)/);   // seen live
+  fails(shotLines.map((l, i) => (i === 0 ? "Imagine your birthday right here." : l)), /caption-speak \("Imagine"\)/);
+  fails(shotLines.map((l, i) => (i === 5 ? "Zoom out, see it all. Book it on Kangrooo." : l)), /talks about the camera \("Zoom"\)/);   // seen live
+  fails(shotLines.map((l, i) => (i === 4 ? "And the floor has a fun party vibe." : l)), /filler \("vibe"\)/);
+  // 60 words is the unhurried ceiling for 30 s (~2 words a second); the old ceiling of 75 sounded rushed.
+  const long = videoShotSchema.safeParse(videoShot({ narration: videoShot().narration + " The windows face west, so the light stays warm well into the evening for you." }));
+  assert.ok(!long.success && long.error.issues.some((i) => /narration must be 45–60 words/.test(i.message)));
+  assert.ok(hookProblems("POV: your birthday with neon vibes on the long wooden table", spaceDetails).some((m) => /generic hype \("vibes"\)/.test(m)));
+});
+
+test("shots after the hook last 4–7 s, so the model's natural ~12-word lines fill them (2026-11-12 dry run)", () => {
+  const b = videoShot().beats;
+  const long = videoShotSchema.safeParse(videoShot({ beats: [b[0], { ...b[1], end_s: 15 }, ...b.slice(3)] }));   // 3–15 s: 12 s shot
+  assert.ok(!long.success);
+  const msg = long.error.issues.map((i) => i.message).find((m) => /^beat 2 lasts 12 s/.test(m));
+  assert.ok(msg);
+  // Must not be routed to the narration-only rewrite (generate-creative's NARRATION_PROBLEM), which can't fix timing.
+  assert.doesNotMatch(msg, /narration|line is \d+ words|space_details|EVERY shot|^the hook /i);
+  const tooShort = videoShotSchema.safeParse(videoShot({ beats: [b[0], b[1], b[2], b[3], { ...b[4], end_s: 28 }, { ...b[5], start_s: 28 }] }));   // 2 s closing shot
+  assert.ok(!tooShort.success && tooShort.error.issues.some((i) => /^beat 6 lasts 2 s/.test(i.message)));
+  assert.ok(videoShotSchema.safeParse(videoShot()).success);
 });

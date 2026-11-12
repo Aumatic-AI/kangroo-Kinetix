@@ -138,3 +138,19 @@ test("frame grid: 6 frames, 5 s apart, one tiled JPEG", () => {
   assert.match(FRAME_GRID_COMMAND, /fps=1\/5/); assert.match(FRAME_GRID_COMMAND, /tile=3x2/); assert.match(FRAME_GRID_COMMAND, /-frames:v 1/);
   assert.match(FRAME_GRID_COMMAND, /-i \{input\} /); assert.match(FRAME_GRID_COMMAND, /\{output\}$/);
 });
+
+test("brief review: a video's narration score is ADVISORY — recorded, never pass/fail (2026-11-12: the gate scored every script 6/10)", () => {
+  const weak = scoreBrief(briefReviewSchema.parse({ scores: allScores(9), narration: 5, issues: [{ dimension: "narration", problem: "reads like a list", fix: "..." }, { dimension: "hook_strength", problem: "generic hook", fix: "name the stage" }] }));
+  assert.equal(weak.passed, true); assert.equal(weak.score, 9); assert.equal(weak.narration, 5);   // kept for the gallery
+  const failing = scoreBrief(briefReviewSchema.parse({ scores: { ...allScores(9), hook_strength: 2, faithfulness: 3 }, narration: 5, issues: [{ dimension: "narration", problem: "reads like a list", fix: "..." }, { dimension: "hook_strength", problem: "generic hook", fix: "name the stage" }] }));
+  assert.equal(failing.passed, false);
+  // The planner's feedback leaves out narration notes: the narration writer rewrites the voice-over anyway.
+  assert.match(briefFeedback(failing), /generic hook/); assert.doesNotMatch(briefFeedback(failing), /reads like a list|NARRATION/);
+  // Images / LinkedIn have no narration score.
+  assert.equal(scoreBrief(briefReviewSchema.parse({ scores: allScores(8) })).narration, null);
+
+  const property = { title: "Loft", spaceCategory: null, eventTypes: [], city: null, region: null, country: null };
+  const video = getBriefReviewPrompt({ pipeline: "social", property, photoCount: 2, planJson: "{}", video: true });
+  assert.match(video.user, /"narration": 0-10/); assert.match(video.user, /does not decide pass\/fail/);
+  assert.doesNotMatch(getBriefReviewPrompt({ pipeline: "social", property, photoCount: 2, planJson: "{}" }).user, /"narration"/);
+});

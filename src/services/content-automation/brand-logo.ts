@@ -78,6 +78,17 @@ export async function brandImage(input: Buffer): Promise<{ buffer: Buffer; logo:
   return { buffer, logo: { tone, width, left, top, cornerLuminance, version: LOGO_VERSION } };
 }
 
+/** Logo width on the end card, as a share of the frame width. */
+const END_CARD_LOGO_SHARE = 0.5;
+
+/** The end card frame: the white Kangrooo logo centred on black, at the video's exact size (the renderer appends it after the clip). */
+export async function renderEndCard(width: number, height: number): Promise<Buffer> {
+  const logo = await renderLogo(Math.round(width * END_CARD_LOGO_SHARE), "light");   // its soft shadow is invisible on black
+  return sharp({ create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } } })
+    .composite([{ input: logo.png, left: Math.round((width - logo.width) / 2) - logo.pad, top: Math.round((height - logo.height) / 2) - logo.pad }])
+    .png().toBuffer();
+}
+
 /** The white, shadowed logo PNG for a video of this width, and the overlay offset from the top-right corner. */
 export async function videoLogo(videoWidth: number): Promise<{ png: Buffer; offset: number; width: number }> {
   const { width, margin } = logoPlacement(videoWidth, "video");

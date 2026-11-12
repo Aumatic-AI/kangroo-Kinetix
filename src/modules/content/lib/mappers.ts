@@ -34,7 +34,7 @@ function toQa(d: RevisionRow["content_decision"]): RevisionQa | null {
   if (!d || (!d.qa && !d.assignment)) return null;
   const b = d.qa?.brief;
   return {
-    brief: b ? { score: b.score, passed: b.passed, rounds: b.rounds ?? 1, issues: b.issues ?? [] } : null,
+    brief: b ? { score: b.score, passed: b.passed, rounds: b.rounds ?? 1, narration: b.narration ?? null, issues: b.issues ?? [] } : null,
     media: d.qa?.media ?? null,
     assignment: d.assignment ? { objective: d.assignment.objective, framework: d.assignment.framework, hookType: d.assignment.hook_type } : null,
     retryOf: d.retry_of ?? null,
