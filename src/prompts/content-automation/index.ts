@@ -57,6 +57,7 @@ const NO_FABRICATION = `HARD RULES — never break these:
 - Use ONLY the property facts provided. Do NOT invent or imply amenities, pricing, discounts, capacity/guest counts, dimensions, address, availability, ratings, awards or booking terms.
 - Do not use numbers about the property (guests, square feet, prices, percentages) at all.
 - You may describe what the REFERENCE PHOTOS show in general visual terms, and suggest the kinds of events the listed event types imply.
+- Never name or describe third-party characters, franchises, brands, films, games, artworks or what is shown on a screen, even when they appear in the photos (a Hello Kitty balloon, a Disney cake topper, a Simpsons arcade, a film on a TV). They belong to someone else and the video model's copyright check rejects them. Treat them as plain decorations ("pink balloons", "a themed cake", "an arcade cabinet", "a screen") or leave them out — code checks this.
 - Respond with a single valid JSON object only — no markdown, no commentary.`;
 
 /** What this property (and the business) already got recently — so a new creative doesn't repeat it. */
@@ -590,3 +591,31 @@ Before you answer, say it in your head as that narrator. If any part sounds writ
 Return JSON exactly: { ${args.rewriteHook ? `"hook": "the new caption hook", ` : ""}"voiceover": "the whole voice-over, one paragraph" }`;
   return { system, user };
 }
+
+/**
+ * Screens ONE listing photo for what Kie's copyright audit rejects. Run only after Kie has
+ * rejected a render for copyright (never up front), and cached per photo. The categories and
+ * wording were validated on 2026-11-13 against the full inventory (1,538 photos) and on Kie:
+ * a prominent character (Hello Kitty balloon) failed the audit; watermarks, app icons, people,
+ * logos and films on screens did not.
+ */
+export function getReferenceScreenPrompt() {
+  return `You audit a venue-listing photo before it is used as a reference image for an AI video generator whose output is checked for copyright. Report ONLY what is clearly visible. Return JSON:
+{"characters":[{"name":"<e.g. Hello Kitty, Mickey Mouse, Spider-Man, Belle; or 'unknown cartoon character'>","form":"<balloon|cake topper|figure|print|costume|screen|other>","prominence":"dominant|clear|small"}],
+"brand_logos":[{"brand":"<name or 'unknown'>","prominence":"dominant|clear|small"}],
+"watermark":"<text of any watermark/photographer signature, or null>",
+"app_ui":"<e.g. 'Instagram avatar icon', or null>",
+"personal_text":"<names/personal text on banners, cards, toppers, or null>",
+"identifiable_people":"none|background|prominent",
+"screen_content":"<what any TV/LED/projector screen shows if it is a recognisable copyrighted image/film/artwork, or null>",
+"artwork":"<recognisable copyrighted artwork/poster/mural, or null>"}
+Use [] or null when absent. No prose.`;
+}
+
+/**
+ * Edit prompt (nano-banana-2, reference mode) that removes third-party IP from ONE listing
+ * photo while keeping the room identical. Validated 2026-11-13: Aviva Studio's Hello Kitty
+ * photo, cleaned with this prompt, passed Kie's copyright audit alone and with the other three
+ * photos (twice), where the original failed every time.
+ */
+export const REFERENCE_CLEAN_PROMPT = "Edit this photo of an event venue. Remove every copyrighted or branded element and every personal detail: cartoon or movie characters (balloons, figures, cake toppers, prints), brand logos, watermarks and photographer signatures, app interface icons, names and lettering on banners, signs and cards, and recognisable people. Replace each removed item with plain, neutral matching surroundings (plain balloons, a plain banner, empty floor or wall). Keep everything else exactly as it is: the same room, layout, furniture, stage, lighting rig, screens, colours, camera angle and framing. Do not add anything new.";

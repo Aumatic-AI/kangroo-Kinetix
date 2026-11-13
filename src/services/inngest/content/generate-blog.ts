@@ -8,6 +8,8 @@ import {
 import type { MediaProbe } from "@/services/content-automation/media-probe";
 import { getBlogAgentPrompt, getBlogObservationPrompt, type BusinessFacts, type PropertyFacts } from "@/prompts/content-automation";
 import { supabase, storeRemoteMedia, withLogo, kieResultUrl, keepAlive, PermanentGenerationError, type Step } from "./shared";
+import { prepareReferenceImages } from "./references";
+import { classifyKieFailure, imageReferenceUrls } from "@/services/content-automation/reference-images";
 import type { CreativeParams } from "./generate-creative";
 
 /**
@@ -25,7 +27,7 @@ import type { CreativeParams } from "./generate-creative";
  * = the structured post.
  */
 
-const IMAGE_SUFFIX = " Landscape 16:9 editorial photograph. Base the scene on the provided reference photos of the real venue and stay faithful to them. Do not invent features, text, logos, prices or signage.";
+const IMAGE_SUFFIX = " Landscape 16:9 editorial photograph. Base the scene on the provided reference photos of the real venue and stay faithful to them. Do not invent features, text, logos, prices or signage. Never reproduce cartoon, film or game characters, mascots, branded decorations, artworks or images on screens from the photos: show them as plain, unbranded versions.";
 const MAX_WRITE_ATTEMPTS = 3;
 
 const observationSchema = z.object({
@@ -64,14 +66,14 @@ const storedBlogOf = (cd: Record<string, unknown> | null | undefined) => (cd?.bl
 export async function generateBlog(step: Step, p: CreativeParams): Promise<{ contentId: string; revisionId: string }> {
   // ---- 1. load the listing + what has already been written about it ------------
   const loaded = (await step.run("load", async (): Promise<Loaded> => {
-    const [{ data: property }, { data: images }, { data: business }] = await Promise.all([
+    const [{ data: property }, { data: business }] = await Promise.all([
       supabase.from("properties").select("title, space_category, event_types, city, region, country, legacy_fields").eq("id", p.propertyId).single(),
-      supabase.from("property_images").select("url, position, validation_status").eq("property_id", p.propertyId).neq("validation_status", "broken").order("position"),
       supabase.from("businesses").select("name, industry, description, tone_of_voice, business_voice, target_audience, target_countries").eq("id", p.businessId).single(),
     ]);
     if (!property) throw new PermanentGenerationError("property not found");
-    const imageUrls = (images ?? []).map((i) => i.url).filter((u) => /^https?:\/\//i.test(u));
-    if (!imageUrls.length) throw new PermanentGenerationError("property has no usable reference images");
+    // Listing photos as real JPEGs in our bucket (free, cached) — Kie refuses the imported `.avif` files.
+    const refs = await prepareReferenceImages(p.businessId, p.propertyId);
+    const imageUrls = imageReferenceUrls(refs);
 
     // Angles already used for this listing (every valid blog revision, including earlier versions
     // of the one being regenerated), so each run picks a different format/angle.
@@ -213,7 +215,11 @@ export async function generateBlog(step: Step, p: CreativeParams): Promise<{ con
       for (const img of todo) {
         if (img.taskId) { out[img.id] = img.taskId; continue; }
         await keepAlive(p);
-        const taskId = await aiOrchestrator.createImageTask(img.prompt + IMAGE_SUFFIX, "16:9", loaded.imageUrls.slice(0, 5), "reference", { exactRatio: true, outputFormat: "jpg" });
+        const taskId = await aiOrchestrator.createImageTask(img.prompt + IMAGE_SUFFIX, "16:9", loaded.imageUrls.slice(0, 5), "reference", { exactRatio: true, outputFormat: "jpg" })
+          .catch((e: unknown) => {
+            const message = e instanceof Error ? e.message : String(e);
+            throw classifyKieFailure(message) === "unsupported_file" ? new PermanentGenerationError(`${message} — Kie can't read one of the listing photos`) : e;
+          });
         out[img.id] = taskId;
         await patchDecision(revisionId, (cd) => {
           const b = storedBlogOf(cd)!;

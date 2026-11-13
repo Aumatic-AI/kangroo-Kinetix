@@ -25,6 +25,35 @@ export const TESTIMONIAL_RULES: [RegExp, string][] = [
   [/\b(best|greatest)\s+(night|party|event|day)\s+of\s+(my|our)\s+li(fe|ves)\b/i, "testimonial"],
 ];
 
+/**
+ * Third-party characters and franchises seen in listing photos (party decorations,
+ * cake toppers, arcade machines, art on the walls, films on screens). Naming one in a
+ * plan or a Seedance prompt makes Kie's copyright audit reject the render ("the output
+ * video may be related to copyright restrictions" — reproduced 2026-11-13 with a prompt
+ * that only named Hello Kitty and Belle, no photos), and it would be third-party IP in a
+ * Kangrooo post anyway. Not exhaustive: the planner prompt forbids every such name; this
+ * catches the common ones deterministically.
+ */
+const FRANCHISE_RULES: RegExp[] = [
+  /\bhello\s*kitty\b|\bsanrio\b|\bkuromi\b|\bmy\s*melody\b/i,
+  /\bdisney\b|\bpixar\b|\bmickey\b|\bminnie\b|\bdonald\s+duck\b|\bgoofy\b/i,
+  /\bfrozen\b(?!\s+(yogurt|drinks?|desserts?|treats?|cocktails?|margaritas?|food))|\belsa\b|\bolaf\b|\bmoana\b|\bencanto\b|\btoy\s+story\b|\bbuzz\s+lightyear\b|\blion\s+king\b|\bstitch\b(?!ed|ing|es)/i,
+  /\b(princess\s+)?(belle|cinderella|ariel|rapunzel|aurora|jasmine)\b(?=.{0,40}\b(princess|disney|beast|topper|cake|costume|character|theme)\b)|\bbeauty\s+and\s+the\s+beast\b|\blittle\s+mermaid\b/i,
+  /\bmarvel\b|\bspider[-\s]?man\b|\bavengers?\b|\biron\s*man\b|\bhulk\b|\bcaptain\s+america\b|\bbatman\b|\bsuperman\b|\bwonder\s+woman\b|\bdc\s+comics\b/i,
+  /\bstar\s+wars\b|\bjedi\b|\bdarth\s+vader\b|\bharry\s+potter\b|\bhogwarts\b|\bpok[eé]mon\b|\bpikachu\b|\bnintendo\b|\bsuper\s+mario\b|\bsonic\s+the\b/i,
+  /\bpaw\s+patrol\b|\bbluey\b|\bpeppa\s+pig\b|\bcocomelon\b|\bsesame\s+street\b|\bminions?\b|\bdespicable\s+me\b|\bshrek\b|\bthe\s+grinch\b|\bgrinch\b|\bsimpsons\b|\bspongebob\b|\bbarbie\b|\blego\b|\bkaws\b/i,
+];
+
+/** The franchise / character names a text mentions (empty when clean). */
+export function findNamedFranchises(text: string): string[] {
+  const hits: string[] = [];
+  for (const re of FRANCHISE_RULES) {
+    const m = text.match(re);
+    if (m && !hits.includes(m[0].toLowerCase())) hits.push(m[0].toLowerCase());
+  }
+  return hits;
+}
+
 export function findUnsupportedClaims(text: string): string[] {
   const hits: string[] = [];
   const rules: [RegExp, string][] = [

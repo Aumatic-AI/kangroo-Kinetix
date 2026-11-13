@@ -62,8 +62,8 @@ export class KieService {
     referenceImages?: string | string[],
     mode: "identity" | "reference" = "identity",
     /** exactRatio: send "4:5" as-is. Kie's current docs list 4:5 as supported, but the
-     * remap to 2:3 below is kept as the default so the existing Meta Ads/Social flows
-     * don't change behavior; 2:3 is outside Instagram's feed range (0.8–1.91).
+     * remap to 2:3 below is kept as the default so the Social module's image flow
+     * doesn't change behavior; 2:3 is outside Instagram's feed range (0.8–1.91).
      * outputFormat: "jpg" for social posts (Instagram requires JPEG). */
     opts?: { exactRatio?: boolean; outputFormat?: "png" | "jpg" }
   ) {
@@ -115,6 +115,9 @@ export class KieService {
 
     const data = await response.json();
     console.log("[KIE_RESPONSE] POST createTask (image)", response.status, data);
+    // Kie reports failures with HTTP 200 and a non-200 `code` in the body (e.g. 500 "File type not
+    // supported" for a reference photo it can't read) — surface that message, not "no jobId".
+    if (data.code && data.code !== 200) throw new Error(`Kie API Error ${data.code}: ${data.msg || JSON.stringify(data).slice(0, 200)}`);
     const jobId = data.taskId || data.jobId || data.id || data.data?.taskId || data.data?.jobId || data.data?.id;
 
     if (!jobId) throw new Error(`No jobId returned from Kie. Response data: ${JSON.stringify(data)}`);

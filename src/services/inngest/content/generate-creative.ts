@@ -26,6 +26,12 @@ import {
 } from "@/prompts/content-automation";
 import { supabase, rpc, storeRemoteMedia, withLogo, ensureVideoLogo, ensureEndCard, kieResultUrl, keepAlive, isPermanentError, PermanentGenerationError, SOCIAL_PLATFORMS, type Step } from "./shared";
 import { generateBlog } from "./generate-blog";
+import { prepareReferenceImages, screenAndCleanReferences } from "./references";
+import { findNamedFranchises } from "@/services/content-automation/claims";
+import {
+  MAX_REFERENCE_STAGE, chooseVideoReferences, classifyKieFailure, imageReferenceUrls, photosToClean, riskLabels,
+  type KieFailureKind, type PreparedReference,
+} from "@/services/content-automation/reference-images";
 
 /**
  * The shared generation pipeline behind both a queue job (weekly / manual
@@ -56,20 +62,22 @@ type Plan = { kind: "social"; data: SocialAgentOutput } | { kind: "linkedin"; da
 
 interface Loaded {
   property: PropertyFacts & { timezone: string | null };
+  /** The listing photos as normalized JPEGs in our bucket (what every AI call sees). */
   imageUrls: string[];
+  refs: PreparedReference[];
   business: BusinessFacts;
   timezone: string;
   weekStart: string;
 }
 
-const VIDEO_SUFFIX = "\nUse the provided reference photos as the real venue and keep it faithful to them: same layout, furniture, materials and light. Do not invent amenities, rooms, views, text overlays, logos, prices or signage. Portable event props (balloons, a cake, laptops) are fine; venue fixtures or equipment the photos don't show are not.";
+const VIDEO_SUFFIX = "\nUse the provided reference photos as the real venue and keep it faithful to them: same layout, furniture, materials and light. Do not invent amenities, rooms, views, text overlays, logos, prices or signage. Portable event props (balloons, a cake, laptops) are fine; venue fixtures or equipment the photos don't show are not. Never reproduce cartoon, film or game characters, mascots, branded decorations, artworks or images on screens from the photos: show them as plain, unbranded versions (plain balloons, a plain cake, a blank or abstract screen).";
 const MAX_TEXT_ATTEMPTS = 3;
 /** Agent calls per creative: schema/assignment/repeat fixes plus up to MAX_BRIEF_REVISIONS critic revisions. */
 const MAX_PLAN_CALLS = 5;
 /** Listing photos shown to the QA reviewers (cost vs. coverage). */
 const QA_REFERENCE_PHOTOS = 4;
 const IMAGE_SUFFIX = (people: PeopleMode) =>
-  " Base the scene on the provided reference photos of the real venue and stay faithful to them: same layout, furniture, materials and light. Do not invent features, rooms, views, text, logos, prices or signage; portable event props are fine. Natural light logic and real materials, photographic, not hyper-polished. " +
+  " Base the scene on the provided reference photos of the real venue and stay faithful to them: same layout, furniture, materials and light. Do not invent features, rooms, views, text, logos, prices or signage; portable event props are fine. Never reproduce cartoon, film or game characters, mascots, branded decorations, artworks or images on screens from the photos: show them as plain, unbranded versions. Natural light logic and real materials, photographic, not hyper-polished. " +
   peopleRule(people);
 
 /** Recent hooks (same pipeline, whole account) and what this property already got — fed to the agent and the repeat check. */
@@ -109,16 +117,17 @@ export async function generateCreative(step: Step, p: CreativeParams): Promise<{
 async function generateSocialOrLinkedIn(step: Step, p: SocialParams): Promise<{ contentId: string; revisionId: string }> {
   // ---- 1. load ---------------------------------------------------------------
   const loaded = (await step.run("load", async (): Promise<Loaded> => {
-    const [{ data: property }, { data: images }, { data: business }, { data: settings }, cycle] = await Promise.all([
+    const [{ data: property }, { data: business }, { data: settings }, cycle] = await Promise.all([
       supabase.from("properties").select("title, space_category, event_types, city, region, country, timezone").eq("id", p.propertyId).single(),
-      supabase.from("property_images").select("url, position, validation_status").eq("property_id", p.propertyId).neq("validation_status", "broken").order("position"),
       supabase.from("businesses").select("name, industry, description, tone_of_voice, business_voice, target_audience, target_countries").eq("id", p.businessId).single(),
       supabase.from("content_automation_settings").select("generation_timezone").eq("business_id", p.businessId).maybeSingle(),
       p.cycleId ? supabase.from("content_generation_cycles").select("week_start").eq("id", p.cycleId).single() : Promise.resolve({ data: null }),
     ]);
     if (!property) throw new PermanentGenerationError("property not found");
-    const imageUrls = (images ?? []).map((i) => i.url).filter((u) => /^https?:\/\//i.test(u));
-    if (!imageUrls.length) throw new PermanentGenerationError("property has no usable reference images");
+    // Listing photos as real JPEGs in our bucket (free; done once per photo, then cached). Kie
+    // refuses the imported `.avif` files outright — see reference-images.ts.
+    const refs = await prepareReferenceImages(p.businessId, p.propertyId);
+    const imageUrls = refs.map((r) => r.url);
     const timezone = property.timezone || settings?.generation_timezone || "America/Toronto";
     const weekStart = (cycle.data as { week_start?: string } | null)?.week_start
       ?? addDays(mondayOf(new Date().toISOString().slice(0, 10)), 7);
@@ -127,7 +136,7 @@ async function generateSocialOrLinkedIn(step: Step, p: SocialParams): Promise<{ 
         title: property.title, spaceCategory: property.space_category, eventTypes: property.event_types ?? [],
         city: property.city, region: property.region, country: property.country, timezone: property.timezone,
       },
-      imageUrls, business: (business ?? {}) as BusinessFacts, timezone, weekStart,
+      imageUrls, refs, business: (business ?? {}) as BusinessFacts, timezone, weekStart,
     };
   })) as Loaded;
 
@@ -408,7 +417,9 @@ export async function runAgent(a: {
     }).join("; ") + ". Return every field with exactly the type shown in the JSON shape.";
   if (a.p.pipeline === "linkedin") {
     const parsed = linkedinAgentSchema.safeParse(json);
-    return parsed.success ? { ok: true, plan: { kind: "linkedin", data: parsed.data } } : { ok: false, error: "the plan was invalid: " + issues(parsed.error) };
+    if (!parsed.success) return { ok: false, error: "the plan was invalid: " + issues(parsed.error) };
+    const named = franchiseError(parsed.data);
+    return named ? { ok: false, error: named } : { ok: true, plan: { kind: "linkedin", data: parsed.data } };
   }
   let parsed = socialAgentSchema.safeParse(json);
   // Every VIDEO's voice-over is written by the narration writer (one focused text call), not the planner,
@@ -432,7 +443,20 @@ export async function runAgent(a: {
   }
   if (!parsed.success) return { ok: false, error: "the plan was invalid: " + issues(parsed.error) };
   if (a.forceType && parsed.data.content_type !== a.forceType) return { ok: false, error: `content_type must be "${a.forceType}"` };
+  const named = franchiseError(parsed.data);
+  if (named) return { ok: false, error: named };
   return { ok: true, plan: { kind: "social", data: parsed.data } };
+}
+
+/**
+ * A plan that names a third-party character or franchise goes back to the agent: the name ends up
+ * in the Seedance prompt, and naming one alone (no photos) failed Kie's copyright audit in testing.
+ */
+function franchiseError(plan: unknown): string | null {
+  const hits = findNamedFranchises(JSON.stringify(plan));
+  return hits.length
+    ? `the plan names third-party characters or brands (${hits.join(", ")}). Never name them: describe them as plain decorations ("pink balloons", "a themed cake", "an arcade cabinet") or leave them out.`
+    : null;
 }
 
 const MAX_NARRATION_REWRITES = 2;
@@ -596,6 +620,19 @@ async function runFfmpeg(step: Step, a: { p: SocialParams; contentId: string; re
   }); })) as { assetId: string; publicUrl: string };
 }
 
+/** A Kie error as the job should treat it: an unreadable reference photo can't be fixed by retrying. */
+function kieError(message: string): Error {
+  return classifyKieFailure(message) === "unsupported_file"
+    ? new PermanentGenerationError(`${message} — Kie can't read one of the listing photos (they should have been normalized to JPEG)`)
+    : new Error(message);
+}
+
+/** " (what the screening found)" for failure messages; empty when nothing was flagged. */
+function riskSummary(refs: PreparedReference[]): string {
+  const found = refs.flatMap((r) => riskLabels(r.screen).map((l) => `photo ${r.position}: ${l}`));
+  return found.length ? ` (${found.join("; ")})` : "";
+}
+
 /** Renders the image or the Seedance clip for one revision; returns the final media asset id. */
 async function produceMedia(step: Step, a: MediaArgs): Promise<string> {
   const { p, loaded, plan, contentId, revisionId, pfx, fix } = a;
@@ -606,14 +643,15 @@ async function produceMedia(step: Step, a: MediaArgs): Promise<string> {
     const renderImage = async (label: string, prompt: string, ratio: "1:1" | "4:5") => {
       // Native 4:5 (Instagram's feed accepts 0.8–1.91; the legacy 2:3 remap is 0.67) and JPEG (Instagram requires it).
       const taskId = (await step.run(`${pfx}create-${label}-task`, () =>
-        aiOrchestrator.createImageTask(prompt, ratio, loaded.imageUrls.slice(0, 5), "reference", { exactRatio: true, outputFormat: "jpg" }))) as string;
+        aiOrchestrator.createImageTask(prompt, ratio, imageReferenceUrls(loaded.refs), "reference", { exactRatio: true, outputFormat: "jpg" })
+          .catch((e: unknown) => { throw kieError(e instanceof Error ? e.message : String(e)); }))) as string;
       let imageUrl: string | null = null;
       for (let i = 0; i < 30 && !imageUrl; i++) {
         await step.sleep(`${pfx}wait-${label}-${i}`, i === 0 ? "8s" : "6s");
         const status = (await step.run(`${pfx}check-${label}-${i}`, async () => {
           await keepAlive(p);
           const s = await aiOrchestrator.checkTaskStatus(taskId);
-          if (s.state === "fail") throw new Error(`Image generation failed: ${s.failMsg || s.failCode || "no reason given"}`);
+          if (s.state === "fail") throw kieError(`Image generation failed: ${s.failMsg || s.failCode || "no reason given"}`);
           return { state: s.state as string, url: s.state === "success" ? kieResultUrl(s) : null };
         })) as { state: string; url: string | null };
         imageUrl = status.url;
@@ -668,82 +706,110 @@ async function produceMedia(step: Step, a: MediaArgs): Promise<string> {
   }
 
   const video = plan.data.video!;
+  const spec = video.clips[0];
   // Exactly one clip (see video-spec.ts): clip index 1.
-  type ClipRow = { id: string; clip_index: number; status: string; provider_task_id: string | null; media_asset_id: string | null; attempts: number; max_attempts: number };
-  const clips = (await step.run(`${pfx}ensure-clips`, async () => [await rpc<ClipRow>("ensure_content_clip", { p_revision: revisionId, p_index: 1 })])) as ClipRow[];
+  type ClipRow = {
+    id: string; clip_index: number; status: string; provider_task_id: string | null; media_asset_id: string | null;
+    attempts: number; max_attempts: number; last_error: string | null; request_params: { refStage?: number } | null;
+  };
+  const [clip] = (await step.run(`${pfx}ensure-clips`, async () => [await rpc<ClipRow>("ensure_content_clip", { p_revision: revisionId, p_index: 1 })])) as ClipRow[];
 
-  const taskIds: Record<number, string> = {};
   const assetIds: Record<number, string> = {};
-  for (const c of clips) {
-    if (c.status === "completed" && c.media_asset_id) assetIds[c.clip_index] = c.media_asset_id;
-    else if (c.status === "processing" && c.provider_task_id) taskIds[c.clip_index] = c.provider_task_id;
-  }
+  if (clip.status === "completed" && clip.media_asset_id) assetIds[1] = clip.media_asset_id;
 
-  const created = (await step.run(`${pfx}create-clip-tasks`, async () => {
-    const out: Record<number, string> = {};
-    // Re-read fresh: if this step is being retried after creating clip 1's
-    // task, clip 1 must be reused, not billed a second time.
-    const { data: fresh } = await supabase.from("content_clips").select("id, clip_index, status, provider_task_id, media_asset_id, attempts, max_attempts").eq("revision_id", revisionId);
-    for (const c0 of clips) {
-      const c = (fresh ?? []).find((f) => f.clip_index === c0.clip_index) ?? c0;
-      if (c.status === "completed" && c.media_asset_id) continue;
-      if (c.status === "processing" && c.provider_task_id) { out[c.clip_index] = c.provider_task_id; continue; }
-      if (assetIds[c.clip_index] || taskIds[c.clip_index]) continue;
-      if (c.attempts >= c.max_attempts) throw new PermanentGenerationError(`clip ${c.clip_index} failed ${c.attempts} times`);
-      const spec = video.clips[c.clip_index - 1];
-      const prompt = spec.prompt + VIDEO_SUFFIX + (fix ? `\nCORRECT THESE PROBLEMS FROM THE PREVIOUS RENDER: ${fix}` : "");
-      await keepAlive(p);
-      const taskId = await aiOrchestrator.createSeedanceVideoTask({
-        prompt, referenceImageUrls: loaded.imageUrls.slice(0, 4), aspectRatio: "9:16", duration: spec.duration_seconds, generateAudio: true, resolution: VIDEO_RESOLUTION,
-      });
-      await supabase.from("content_clips").update({
-        provider_task_id: taskId, status: "processing", attempts: c.attempts + 1, started_at: new Date().toISOString(),
-        last_error: null, request_params: { prompt, duration: spec.duration_seconds, aspect_ratio: "9:16", model: SEEDANCE_MODEL },
-      }).eq("id", c.id);
-      out[c.clip_index] = taskId;
-    }
-    return out;
-  })) as Record<number, string>;
-  Object.assign(taskIds, created);
-
-  const clipUrls: Record<number, string> = {};
-  const pendingIdx = () => clips.map((c) => c.clip_index).filter((i) => !assetIds[i] && !clipUrls[i]);
-  for (let i = 0; i < 120 && pendingIdx().length; i++) {   // ~40 min: a 30 s clip renders slowly
-    await step.sleep(`${pfx}wait-video-${i}`, i === 0 ? "30s" : "20s");
-    const res = (await step.run(`${pfx}check-video-${i}`, async () => {
-      await keepAlive(p);
-      const found: Record<number, string> = {};
-      for (const idx of pendingIdx()) {
-        const s = await aiOrchestrator.checkTaskStatus(taskIds[idx]);
-        if (s.state === "fail") {
-          const clip = clips.find((c) => c.clip_index === idx)!;
-          await supabase.from("content_clips").update({ status: "failed", last_error: String(s.failMsg || s.failCode || "no reason given").slice(0, 500) }).eq("id", clip.id);
-          throw new Error(`Video clip ${idx} failed: ${s.failMsg || s.failCode || "no reason given"}`);
-        }
-        if (s.state === "success") {
-          const u = kieResultUrl(s);
-          if (u) found[idx] = u;
-        }
+  if (!assetIds[1]) {
+    // Kie's copyright audit rejects a render that reproduces a prominent third-party character from
+    // the listing photos (reproduced 2026-11-13). A rejection costs no credits, so the first render
+    // always uses the normal photos; only after a "[copyright]" rejection does the job screen this
+    // listing's photos and clean the risky ones (the only Kie spend), then step through
+    // chooseVideoReferences' stages. A retried job resumes after the stage that was rejected; any
+    // other failure retries its own stage.
+    const prevStage = clip.request_params?.refStage ?? 0;
+    let stage = clip.status === "failed" && clip.last_error?.startsWith("[copyright]") ? prevStage + 1 : prevStage;
+    let refs = loaded.refs;
+    let lastRefUrls: string[] | null = null;
+    let screenedThisRun = false;   // screening/cleaning runs at most once per job, so a photo is never paid to clean twice
+    for (;;) {
+      if (stage > MAX_REFERENCE_STAGE) {
+        throw new PermanentGenerationError(`Kie's copyright check rejected this listing's video with every reference-photo fallback${riskSummary(refs)}. Regenerate it as an image post instead.`);
       }
-      return found;
-    })) as Record<number, string>;
-    Object.assign(clipUrls, res);
-  }
-  if (pendingIdx().length) throw new Error("Video generation timed out");
+      const s = stage === 0 ? "" : `-s${stage}`;
+      if (stage > 0 && !screenedThisRun && (refs.some((r) => !r.screen) || photosToClean(refs).length)) {
+        refs = await screenAndCleanReferences(step, { p, refs, pfx: `${pfx}s${stage}-` });
+        screenedThisRun = true;
+      }
+      const refUrls = chooseVideoReferences(refs, stage);
+      if (!refUrls.length) throw new PermanentGenerationError(`no photo of this listing is safe to send to the video model after Kie's copyright rejection${riskSummary(refs)}`);
+      // Never resend a request Kie already rejected: a stage that changes nothing is skipped.
+      if (lastRefUrls && refUrls.length === lastRefUrls.length && refUrls.every((u, i) => u === lastRefUrls![i])) { stage++; continue; }
+      lastRefUrls = refUrls;
 
-  for (const c of clips) {
-    if (assetIds[c.clip_index]) continue;
-    const stored = (await step.run(`${pfx}store-clip-${c.clip_index}`, async () => {
-      await keepAlive(p);   // a large upload can be slow: renew the lease before it starts
-      const dur = video.clips[c.clip_index - 1].duration_seconds;
-      const s = await storeRemoteMedia({
-        businessId: p.businessId, sourceUrl: clipUrls[c.clip_index], path: `${p.businessId}/content/${contentId}/${revisionId}-clip${c.clip_index}.mp4`,
-        type: "video", mime: "video/mp4", durationSeconds: dur, metadata: { contentId, revisionId, clip: c.clip_index },
-      });
-      await supabase.from("content_clips").update({ status: "completed", media_asset_id: s.assetId, duration_seconds: dur, last_error: null }).eq("id", c.id);
-      return s;
-    })) as { assetId: string };
-    assetIds[c.clip_index] = stored.assetId;
+      const taskId = (await step.run(`${pfx}create-clip-tasks${s}`, async () => {
+        // Re-read fresh: if this step is being retried after creating the task, reuse it — never bill twice.
+        const { data: c } = await supabase.from("content_clips").select("status, provider_task_id, attempts, max_attempts, request_params").eq("id", clip.id).single();
+        const cStage = (c?.request_params as { refStage?: number } | null)?.refStage ?? 0;
+        if (c?.status === "processing" && c.provider_task_id && cStage === stage) return c.provider_task_id;
+        const attempts = c?.attempts ?? clip.attempts;
+        if (attempts >= (c?.max_attempts ?? clip.max_attempts)) throw new PermanentGenerationError(`clip 1 failed ${attempts} times`);
+        const prompt = spec.prompt + VIDEO_SUFFIX + (fix ? `\nCORRECT THESE PROBLEMS FROM THE PREVIOUS RENDER: ${fix}` : "");
+        await keepAlive(p);
+        let id: string;
+        try {
+          id = await aiOrchestrator.createSeedanceVideoTask({
+            prompt, referenceImageUrls: refUrls, aspectRatio: "9:16", duration: spec.duration_seconds, generateAudio: true, resolution: VIDEO_RESOLUTION,
+          });
+        } catch (e) {
+          throw kieError(e instanceof Error ? e.message : String(e));
+        }
+        await supabase.from("content_clips").update({
+          provider_task_id: id, status: "processing", attempts: attempts + 1, started_at: new Date().toISOString(), last_error: null,
+          request_params: { prompt, duration: spec.duration_seconds, aspect_ratio: "9:16", model: SEEDANCE_MODEL, refStage: stage, referenceImageUrls: refUrls },
+        }).eq("id", clip.id);
+        return id;
+      })) as string;
+
+      let clipUrl: string | null = null;
+      let failure: { kind: KieFailureKind; message: string } | null = null;
+      for (let i = 0; i < 120 && !clipUrl && !failure; i++) {   // ~40 min: a 30 s clip renders slowly
+        await step.sleep(`${pfx}wait-video${s}-${i}`, i === 0 ? "30s" : "20s");
+        const r = (await step.run(`${pfx}check-video${s}-${i}`, async () => {
+          await keepAlive(p);
+          const st = await aiOrchestrator.checkTaskStatus(taskId);
+          if (st.state === "fail") {
+            // Returned, not thrown: re-polling a failed task (a step retry) can't change the answer.
+            const message = String(st.failMsg || st.failCode || "no reason given");
+            const kind = classifyKieFailure(message);
+            await supabase.from("content_clips").update({ status: "failed", last_error: `[${kind}] ${message}`.slice(0, 500) }).eq("id", clip.id);
+            return { url: null, failure: { kind, message } };
+          }
+          return { url: st.state === "success" ? kieResultUrl(st) : null, failure: null };
+        })) as { url: string | null; failure: { kind: KieFailureKind; message: string } | null };
+        clipUrl = r.url;
+        failure = r.failure;
+      }
+
+      if (clipUrl) {
+        const sourceUrl = clipUrl;
+        const stored = (await step.run(`${pfx}store-clip-1${s}`, async () => {
+          await keepAlive(p);   // a large upload can be slow: renew the lease before it starts
+          const st = await storeRemoteMedia({
+            businessId: p.businessId, sourceUrl, path: `${p.businessId}/content/${contentId}/${revisionId}-clip1.mp4`,
+            type: "video", mime: "video/mp4", durationSeconds: spec.duration_seconds, metadata: { contentId, revisionId, clip: 1, refStage: stage },
+          });
+          await supabase.from("content_clips").update({ status: "completed", media_asset_id: st.assetId, duration_seconds: spec.duration_seconds, last_error: null }).eq("id", clip.id);
+          return st;
+        })) as { assetId: string };
+        assetIds[1] = stored.assetId;
+        break;
+      }
+      if (!failure) throw new Error("Video generation timed out");
+      if (failure.kind === "copyright") {
+        console.warn(`[CONTENT_VIDEO] stage ${stage} rejected by Kie's copyright audit for property ${p.propertyId}: ${failure.message}`);
+        stage++;
+        continue;
+      }
+      throw kieError(`Video clip 1 failed: ${failure.message}`);
+    }
   }
 
   // What was actually produced for the clip (read back from the stored probe, so a re-run

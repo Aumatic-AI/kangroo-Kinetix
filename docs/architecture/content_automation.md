@@ -1,7 +1,7 @@
 # Content Automation — Data Model & Safeguards
 
-> **Status: base migration applied to the linked project. `20261102000000_content_manual_trigger.sql` (video formats, proposed schedules, auto-run flag, manual trigger) must be applied before the generation worker and gallery work.**
-> Source: `supabase/migrations/20261031000000_content_automation_schema.sql`. Product requirements: [`../kangrooo-content-automation-spec.md`](../kangrooo-content-automation-spec.md). Where this file and the spec disagree, this file reflects the migration (the spec's §15 table list was superseded — see "Deviations from the spec").
+> **Status: all content-automation migrations are applied to the linked project** (`20261031000000_content_automation_schema.sql` plus `20261102000000` manual trigger, `20261103000000` week plan, `20261106000000` blog pipeline, `20261107000000` gallery delete, `20261112134926` exact-count trigger).
+> Source: `supabase/migrations/20261031000000_content_automation_schema.sql` and the later migrations above. Product requirements: [`../kangrooo-content-automation-spec.md`](../kangrooo-content-automation-spec.md). Where this file and the spec disagree, this file reflects the migration (the spec's §15 table list was superseded — see "Deviations from the spec").
 > What exists today: the **database layer, the publishing worker service (not scheduled), the guarded API routes, and — for the testing phase — the generation worker, the gallery and the Automation page** (see §10). Publishing is **not wired**: generated content only reaches the gallery.
 
 ## 1. The 12 new tables
@@ -26,10 +26,9 @@
 **Derived, never stored:** `property_promotion_stats` (view, `security_invoker`) — per property × environment: generated / social / linkedin / failed-generation / in-flight counts, last generated (overall + per pipeline), content count, published-content count, last published.
 
 ### Existing Kinetix tables
-- **Reused unchanged:** `businesses`, `business_users`, `profiles` (identity/RBAC), `media_assets` (all creative media), `platform_connections` (Upload-Post-backed accounts), `api_credentials`, `prompt_overrides`, `studio_sessions/messages` (creative studio), `upload_post_analytics_cache`.
+- **Reused unchanged:** `businesses`, `business_users`, `profiles` (identity/RBAC), `media_assets` (all creative media), `platform_connections` (Upload-Post-backed accounts), `api_credentials`, `prompt_overrides`, `upload_post_analytics_cache` (unused).
 - **Modified:** `social_posts` (above); policy `social_posts_write` replaced by `social_posts_write_manual`.
-- **Untouched:** all Meta Ads tables (`campaigns`, `ad_sets`, `ads`, `leads`, `meta_ad_creatives`, `ad_performance_daily`, …).
-- **Retained, not removed:** the Outreach tables/routes/jobs. Removal is a separate, dependency-checked step (see the report in the PR/summary); this migration drops nothing.
+- **Removed since:** the Outreach schema (`20261101000000_remove_outreach.sql`) and the Meta Ads schema, including `studio_sessions/messages` (`20261104000000_remove_meta_ads.sql`). The base content-automation migration itself dropped nothing.
 
 ### Relationships (all business-scoped by composite foreign keys)
 ```mermaid
@@ -137,14 +136,22 @@ Scheduling lives in the **database**, not on Upload-Post. The worker (`src/servi
 ## 7. Integrity & deletion
 
 - Composite FKs enforce business ownership everywhere; weeks start on Monday; frequencies are 0–14.
-- No history is cascaded away: every history FK is `RESTRICT` or `SET NULL (column)`. Deleting a cycle keeps promotions and content (pointers nulled). `businesses` → new tables is `RESTRICT` (a business with automation history cannot be deleted without an explicit purge procedure, **not written**). Disconnecting a platform account detaches automation posts instead of deleting them. Content is archived (`archived_at`), not deleted.
+- No history is cascaded away: every history FK is `RESTRICT` or `SET NULL (column)`. Deleting a cycle keeps promotions and content (pointers nulled). `businesses` → new tables is `RESTRICT` (a business with automation history cannot be deleted without an explicit purge procedure, **not written**). Disconnecting a platform account detaches automation posts instead of deleting them. Content is normally archived (`archived_at`), not deleted.
+- **Exception — gallery delete** (`20261107000000_content_delete.sql`): the gallery's delete button calls `delete_content_item(p_id)` (`SECURITY DEFINER`, editor+). It **permanently** deletes the `property_content` row, and its revisions and clips go with it (`ON DELETE CASCADE`). It refuses an item that is still `processing`, and the `RESTRICT` FK from `social_posts` blocks deleting a creative that has publishing records. Media files stay in storage. The rotation ledger (`property_promotions`) has no FK to the content, so the listing's promotion history survives.
 - Revisions: a validated revision is immutable; validation requires final media, the right number of completed clips (video), or text (LinkedIn).
 
 ## 8. Deviations from the spec's §15
 `content_schedule` is **not** a table (the post *is* the schedule); `last_used_for_video`/`video_use_count`/`rotation_position` are **derived** (view / identity), not columns; `content_performance` hangs off `social_posts`; added `property_images`, `property_legacy_content`, `property_promotions`, `content_clips`; `automation_mode` on cycles became `environment`.
 
 ## 9. Not built yet
-The scheduling engine that creates Live `social_posts` from a proposed schedule, the Inngest functions that tick `runPublishBatch` / `reconcileUnknownPosts`, Live mode and automatic weekly runs (both refused by the settings API during testing), analytics collection (`content_performance`), and real ffprobe-based duration/audio checks (durations are currently the requested clip lengths).
+- The scheduling step that creates Live `social_posts` from a proposed schedule, and the Inngest functions that tick `runPublishBatch` / `reconcileUnknownPosts` (the worker in `publish.ts` exists and is tested, but nothing calls it).
+- Live mode and automatic weekly runs. Both are refused by the settings API during testing, and the Automation page shows them as locked.
+- Analytics collection: nothing writes `content_performance`, and nothing feeds performance back into scheduling or content.
+- Audio-sync and narration-completeness checks on rendered video. Duration, codecs, audio track and size are measured from the real file (`media-probe.ts`), but by product decision nothing inspects a rendered video's content (§10).
+- Audience or property timezones: every slot uses `generation_timezone`.
+- Automation status on the root Dashboard (mode, paused, current cycle, upcoming content, failures). It shows only Upload-Post reach.
+- Gallery filters for pipeline, environment, scheduled/published, property and date range. `GET /api/content/gallery` already accepts `pipeline`, `environment`, `property` and a `from`/`to` date range, but the UI only offers content type and generation status.
+- A marker for an incomplete week (a cycle with failed slots).
 
 ## 10. Testing-phase generation (gallery only)
 
@@ -189,7 +196,7 @@ The gallery drawer shows the chosen voice under "Creative strategy".
 
 **Media validation (what was produced, not what was requested).** Every downloaded file is inspected from its container headers (`media-probe.ts`, no dependencies): duration, size, fps, codecs, audio track and moov placement for MP4; dimensions and format for JPEG/PNG. The probe is stored on `media_assets.metadata.probe`. A revision only becomes `valid` if the real media passes every social platform's rules (`platform-specs.ts`) — media that can't be inspected fails closed. Rules: **video** 9:16 (house rule) with an audio track; Instagram ≥3 s, H.264/H.265 + AAC ≤48 kHz, moov at the start, ≤300 MB; Facebook Reels 3–90 s, ≥540×960; TikTok 3 s–10 min, 360–4096 px (video figures from Upload-Post's Video Format Requirements page). **Image** limits (Instagram aspect 0.8–1.91 and JPEG; Facebook 4 MB; TikTok JPEG/20 MB) are **not verified against Upload-Post's photo page** and are deliberately conservative — re-check before publishing is built. Measured duration replaces the requested one on the revision.
 
-**Image output:** social images are requested at native 4:5 as JPEG (the provider's legacy 4:5→2:3 remap is outside Instagram's feed range; it is still the default for the Meta Ads/Social flows, opted out via `exactRatio`). LinkedIn images are 1:1 JPEG and carry a **text hook** (2–6 plain words, ≤ 40 chars) rendered by the image model. The text is never trusted: `image-text.ts` has a vision model (GPT-4o, high detail, temperature 0) read the finished image back letter by letter, and the headline must match exactly with no other text on the image. A bad render is regenerated (up to 3 tries); if none verifies, the job fails closed (`PermanentGenerationError`) rather than keep a misspelled image. The hook is recorded in the media asset's `metadata.hook`.
+**Image output:** social images are requested at native 4:5 as JPEG (the provider's legacy 4:5→2:3 remap is outside Instagram's feed range; it is still the default for the Social module's image flow, opted out via `exactRatio`). LinkedIn images are 1:1 JPEG and carry a **text hook** (2–6 plain words, ≤ 40 chars) rendered by the image model. The text is never trusted: `image-text.ts` has a vision model (GPT-4o, high detail, temperature 0) read the finished image back letter by letter, and the headline must match exactly with no other text on the image. A bad render is regenerated (up to 3 tries); if none verifies, the job fails closed (`PermanentGenerationError`) rather than keep a misspelled image. The hook is recorded in the media asset's `metadata.hook`.
 
 **Video assembly:** the stored clip is always run through one FFmpeg job (`ffmpeg-remux.ts` → `brandVideoCommand`) that overlays the Kangrooo logo top-right, **dips the picture (logo included) to black over the last 0.5 s and appends a 1 s end card**: the white Kangrooo logo fading in on black over 0.4 s, then holding. The audio fades out over the last 0.4 s (shorter than the picture, so the narrator's last word isn't swallowed) and is padded with silence under the card. The final video is the clip + 1 s (≈31.1 s), and the duration check expects that. The job re-encodes (libx264 CRF 18, AAC 192k) and writes the moov atom first (`+faststart`, needed by Instagram). Inputs: `{input0}` the clip, `{input1}` a pre-sized white logo PNG with a soft shadow (`brand-logo.ts` → `videoLogo`, cached at `<business>/brand/kangrooo-logo-<version>-video-<w>w.png`), `{input2}` the end-card PNG at the clip's exact size (`renderEndCard`, cached at `<business>/brand/kangrooo-endcard-<END_CARD_VERSION>-<LOGO_VERSION>-<w>x<h>.png`), looped for 1 s at the clip's fps. The timings live in `video-spec.ts` (`END_CARD_SECONDS`, `END_FADE_SECONDS`, `END_AUDIO_FADE_SECONDS`, `END_CARD_LOGO_FADE_SECONDS`). The renderer blocks `;`, so the four filter chains are joined with `,`, which ffmpeg accepts because every intermediate output is labelled (verified on the renderer 2026-11-12). The asset's metadata records `endCard: { url, seconds, version }`. The video model is never asked to draw the logo.
 
@@ -221,3 +228,43 @@ A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`.
 **Gallery.** A "Blogs" filter; blog cards show the title and hero; the drawer renders the post as a reader would see it (`BlogView.tsx`), the format and angle the AI chose and why, what it saw in the photos, and a **Copy Markdown** button (the only way a post leaves the gallery). Regenerate keeps earlier revisions and picks a fresh angle unless a note says otherwise. Weekly frequency is set in Automation; **Generate now** adds one blog alongside the social and LinkedIn creatives.
 
 **Not covered.** Publishing a blog anywhere (no destination exists), SEO tooling, and blog-specific rows in the per-listing promotion stats (the existing `property_promotion_stats` view counts a blog in `generated_count`).
+
+## 12. Listing photos as reference images (format + copyright)
+
+Two Kie failures, both reproduced on 2026-11-13 with 4 s Seedance tasks on Aviva Studio and other listings. Code: `src/services/content-automation/reference-images.ts` (pure, unit-tested in `scripts/tests/content-references.test.mjs`) and `src/services/inngest/content/references.ts`.
+
+**1. Unreadable files.** 1,051 of the 1,538 imported photos are named `.avif` but contain JPEG bytes, and `api.kangrooo.com` serves them as `application/octet-stream` (one extensionless PNG too). Kie refuses them outright, before any rendering: `code 500 "File type not supported"`, for Seedance video **and** `nano-banana-2` images. 219 listings have only such photos, so they could produce no media at all. The rotation had only reached listings with JPG/PNG photos, so it hadn't failed yet.
+- **Fix (free):** `prepareReferenceImages`, inside each job's `load` step, downloads that listing's photos (30 s limit each), re-encodes each to an upright, opaque JPEG (≤ 2048 px, `sharp`), and stores it at `business_media/<business>/properties/<property>/ref-<position>-<hash>.jpg`.
+- The copy is linked through `property_images.media_asset_id`, and the photo is marked `ok`. The `media_assets` row's `metadata.reference.sourceUrl` must match the photo's URL to be reused.
+- Every AI call (planner, critic, image and video renders, blog) uses these copies.
+- Nothing is converted in bulk: a listing's photos are converted when its turn comes. A photo that can't be downloaded or decoded is skipped for that job (404/410 marks it `broken`).
+- `KieService.createImageTask` now surfaces Kie's in-body error code, and an "unsupported file" error fails the job permanently instead of being retried.
+
+**2. Kie's copyright audit.** Seedance checks the **rendered** video and rejects it with `failCode 400` "Content security audit did not pass; the output video may be related to copyright restrictions" (0 credits, but only after 3–11 min of rendering).
+- **What failed:** Aviva Studio's photo of a large Hello Kitty balloon, every time. A prompt that only *named* Hello Kitty and Belle, with no photos, also failed.
+- **What passed:** smaller or painted characters (a Simpsons arcade, Spider-Man/Mickey paintings, a Grinch costume), a film on a screen, logos, watermarks, an Instagram icon and real people.
+- **The audit isn't consistent:** the same Aviva photo set passed once in production.
+
+**How a job handles it** (product decision, 2026-11-13: no Kie credits are spent up front; only in a job that hits the problem):
+1. **Stage 0:** render with the first four normalized photos, using any verified cleaned copy an earlier job made.
+2. On a `[copyright]` rejection, recorded on `content_clips.last_error` along with `request_params.refStage` and `referenceImageUrls`: **screen** this listing's photos with GPT-4o vision (`getReferenceScreenPrompt`; cached on the photo's asset at `metadata.reference.screen`).
+3. **Clean** the riskiest tier with `nano-banana-2` (`REFERENCE_CLEAN_PROMPT`, about 8 Kie credits a photo):
+   - "high" means a prominent character;
+   - "medium" (only when there is no "high") means a small character, an artwork, or an image on a screen.
+
+   Each cleaned copy is screened again and used only if it comes back low-risk. It's cached at `metadata.reference.clean`, so the listing's later jobs start from it. Screening and cleaning run at most once per job.
+4. **Stage 1:** low-risk originals plus verified cleaned copies.
+5. **Stage 2:** a single low-risk photo.
+6. **After that:** a permanent failure that names what the screening found.
+
+A stage whose photos are identical to the previous stage's is skipped, so a rejected request is never resent. A failed task is returned from its polling step rather than thrown, so step retries don't keep re-polling a dead task.
+
+**Free safeguards:**
+- The agents' hard rules (`NO_FABRICATION`) forbid naming characters, franchises, brands, films, artworks or screen content.
+- `findNamedFranchises` (`claims.ts`) sends back a plan that names a common one.
+- The Seedance and image prompts tell the model to render such things as plain, unbranded versions instead of reproducing them from the photos.
+
+**Not covered:**
+- Automatically switching a video that fails every stage into an image post. The job fails; regenerate it as an image.
+- Fixing the content type on `api.kangrooo.com` itself, which is outside this repo.
+- Image posts aren't audited by Kie, so a social image could still reproduce a character if the prompt rule is ignored.
