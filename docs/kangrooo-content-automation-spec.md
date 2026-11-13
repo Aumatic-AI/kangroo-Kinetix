@@ -2,10 +2,54 @@
 ## Product Requirements & Technical Implementation Specification
 
 **Document type:** Product and Engineering Source of Truth  
-**Version:** 1.0  
-**Date:** October 30, 2026  
+**Version:** 1.1 (requirements unchanged from 1.0; implementation status added)  
+**Date:** October 30, 2026 · status updated November 13, 2026  
 **Product:** Kangrooo  
 **Scope:** Automated property promotion, AI content generation, weekly scheduling, content gallery, and social media publishing.
+
+---
+
+# 0. Implementation Status (as of November 13, 2026)
+
+This section records what the code on `main` actually does. The requirements below are unchanged, except where a section carries a **Status** note recording a product decision that replaced it. How it works is described in [`architecture/content_automation.md`](architecture/content_automation.md).
+
+The system is in its **testing phase**. Content is generated only from the gallery's "Generate now" button, kept in the private gallery, and never published.
+
+| Phase (§20) | State |
+|---|---|
+| 1. Inventory and foundation | **Done.** Property import (`scripts/inventory-import/`), Listings module, Outreach removed (Meta Ads also removed). |
+| 2. Settings and Testing mode | **Done, Testing only.** Two independent frequencies (plus a blog frequency), pause/resume, Testing mode enforced in the database. Live mode is refused by the settings API. |
+| 3. AI content generation | **Done**, except that video is always one 30 s clip (see §6). Rotation, social and LinkedIn agents, scripts, images, narrated video, validation, revisions and regeneration all work. |
+| 4. Weekly orchestration and scheduling | **Built, switched off.** The weekly cycle (Fri 18:00 America/Toronto) and the whole-week planner exist, but only run with `auto_run_enabled`, which the API refuses to set. Times use the business timezone. |
+| 5. Social media publishing | **Not wired.** A publishing worker with all its safety checks exists (`src/services/content-automation/publish.ts`), but nothing schedules it and nothing creates the post records it would publish. |
+| 6. Analytics and optimization | **Not started.** `content_performance` exists but nothing writes to it. |
+
+**Not built yet:**
+- Video length chosen by the AI (30 s vs 2 × 20 s): replaced by a product decision, see §6.
+- Live publishing and the scheduling step that creates publishing records.
+- Audience or property timezones.
+- Performance collection, and using it in scheduling.
+- Automation status on the Dashboard (§18.1).
+- Gallery filters for pipeline, environment, scheduled/published, property and date range (§11.2). The API supports most of them; the UI has only content type and generation status.
+- A marker for an incomplete week (§9.3).
+- Video usage count and next planned promotion in Listings (§18.2).
+- Audio-sync and narration-completeness checks on rendered video (§6.4).
+
+**Built beyond or against this spec:**
+- A display-only **blog** pipeline (§22 lists blogs as out of scope).
+- A **permanent delete** for gallery items (`delete_content_item`), which removes a creative and all its revisions. This conflicts with §11.5 / §12.2's "preserve history"; the rotation history (`property_promotions`) is kept.
+- The data model differs from §15 in documented ways: there is no `content_schedule` table (the `social_posts` row is the schedule), and video usage counts are derived rather than stored. See the architecture doc's §8.
+
+**Open decisions (§23) that have been decided in code:**
+- #2 weekly trigger: Friday 18:00 America/Toronto.
+- #3 frequency limits: 0–14 per pipeline.
+- #4 rotation: one shared promotion history with per-pipeline fairness; blogs rotate separately.
+- #5 eligibility: an active listing needs at least one image not marked broken.
+- #6 publish failures: retried with backoff (up to 3), more than 6 h late means skipped, and an uncertain outcome is never retried automatically.
+- #7 mode switching: Live → Testing or pause holds scheduled live posts.
+- #10 video provider: Seedance 2.5, one 30 s clip with native narration.
+
+Still open: #1 (platform API capabilities), #8 (analytics availability), #9 (scheduling model beyond the current heuristic).
 
 ---
 
@@ -248,6 +292,8 @@ The system should maintain:
 These values should be maintained automatically.
 
 # 6. Video Generation System
+
+> **Status: replaced by a product decision.** Every video is exactly **one 30-second clip** (Seedance 2.5, 9:16, 480p, native narration), and the AI chooses neither length nor clip count (`src/services/content-automation/video-spec.ts`). Code then adds the Kangrooo logo, a 0.5 s fade to black and a 1 s logo end card, so the final file is about 31 s. Format B (2 × 20 s) and §6.3 format selection are not implemented. The database still allows `two_clip` for older rows. The AI does decide **image vs video** for each social creative. Of §6.4's checks, duration, aspect ratio, resolution, codecs, audio track and upload are verified on the real file; audio sync and narration completeness are not.
 
 The social pipeline supports two video-generation formats.
 
@@ -739,6 +785,8 @@ The previously reviewed architecture also includes outreach-specific tables:
 Outreach is outside the Kangrooo content-automation scope. Its UI, routes, workers, prompts, settings, and tables should be removed only after dependency checks.
 
 Meta advertising leads are distinct from outreach prospecting leads. They should not be removed automatically.
+
+> **Status:** Outreach was removed (`20261101000000_remove_outreach.sql`). The whole Meta Ads module was later removed too, by explicit product decision (`20261104000000_remove_meta_ads.sql`): `studio_sessions`/`studio_messages`, `meta_ad_creatives`, `ad_performance_daily` and the leads table are gone. `upload_post_analytics_cache` remains but is unused.
 
 These findings are based on the previously reviewed Kinetix schema and architecture, not a complete verification of every repository implementation.
 
@@ -1284,6 +1332,8 @@ The following are not part of the initial scope unless explicitly added later:
 - Manual content composition as the primary workflow.
 
 The historical blog fields in the supplied inventory can be retained for data compatibility, but blog automation is not part of the currently defined social content pipelines.
+
+> **Status:** a display-only blog pipeline was added anyway. It generates articles with images into the gallery, has its own weekly frequency and rotation, and never publishes. Posts leave the gallery only via "Copy Markdown". See `architecture/content_automation.md` §11.
 
 # 23. Open Technical Decisions
 

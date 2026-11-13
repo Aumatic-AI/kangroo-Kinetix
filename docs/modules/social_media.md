@@ -162,7 +162,6 @@ Posting the same generated video to Instagram and TikTok is genuinely **two rows
 
 ## 12. Known Limitations
 
-- A background "song" can be attached to a video post, but it isn't mixed into the final audio yet.
 - Carousel (multi-image) posts aren't available yet, even though some groundwork for them exists in the data model.
 - A scheduled/publishing post that takes unusually long to resolve on the publishing side has no automatic follow-up after the first check window — it would need a manual look.
 - No way to edit a post that's already scheduled — only cancel it and start over.

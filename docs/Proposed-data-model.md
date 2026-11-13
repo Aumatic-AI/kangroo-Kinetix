@@ -1,6 +1,6 @@
 # Kangrooo proposed data model
 
-**Status: migration written and validated locally (`supabase/migrations/20261031000000_content_automation_schema.sql`) · NOT applied to any Supabase project.** The authoritative description is now [`architecture/content_automation.md`](architecture/content_automation.md); this file is the original review and keeps its history. Where they differ, the architecture doc wins.
+**Status: historical. The migration (`supabase/migrations/20261031000000_content_automation_schema.sql`) and its follow-ups are applied to the linked Supabase project; Outreach and Meta Ads have since been removed.** The authoritative description is now [`architecture/content_automation.md`](architecture/content_automation.md); this file is the original review and keeps its history. Where they differ, the architecture doc wins.
 
 ## Reconciled table list (12 new tables)
 

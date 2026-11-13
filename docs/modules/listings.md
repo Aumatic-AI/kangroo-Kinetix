@@ -20,9 +20,11 @@ A top-level module (`/listings`, one flat page like Settings — no secondary si
 | Page / components / hook / types / pure helpers | `src/modules/listings/` |
 | Route | `src/app/(app)/listings/page.tsx` (`ROUTES.LISTINGS.ROOT`) |
 | API | `GET /api/listings` (list), `GET/PATCH /api/listings/[id]` (detail, activate/deactivate) |
-| Nav | `PRIMARY_NAV_ITEMS` ("Listings"), `MODULES.listings`, `SECONDARY_NAV_ITEMS.listings = []` |
+| Nav | `NAV_SECTIONS` → "Content" section → "Listings" (`src/config/navigation.ts`) |
 
 All reads and the status update run on the signed-in user's session, so RLS scopes them to their business; only editors and above can change a listing's status (a rejected update returns 403). `search` input is sanitised so it can only act as a plain substring in the PostgREST `or()` filter (`lib/listings.ts`, unit-tested in `scripts/tests/listings-lib.test.mjs`).
 
 ## Not included (yet)
-"Next planned promotion" and "video usage count" from the spec — they depend on the weekly planner and video generation, which are not built.
+- **Video usage count** (spec §18.2). Video generation exists now, but the table doesn't show a per-listing video count, and `property_promotion_stats` doesn't count videos separately (it has generated / social / LinkedIn / failed / published).
+- **Next planned promotion.** The weekly planner (`planCycleWeek`) plans posting *times* before properties are assigned, and automatic weekly runs are off during testing, so there is no planned promotion per listing to show.
+- **Location column.** The city appears under the listing name instead of in its own column.

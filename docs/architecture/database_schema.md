@@ -1,6 +1,6 @@
 # Kinetix — Database Architecture & Data Flows
 
-This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the original **14-table core** (§1–§7, Meta Ads + Social Media + shared infrastructure) — there's no single fixed table count worth quoting as a headline number, since the schema keeps growing as modules get built.
+This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the **core** (§1–§7: users/businesses, media, platform connections, Social Media) and the **12 content-automation tables** (properties, rotation, generation queue, content, revisions, clips, publishing logs, performance), which are documented in full in [`content_automation.md`](content_automation.md) rather than repeated here. The Meta Ads (§3–6) and Outreach (§8) tables have been dropped.
 
 **Multi-tenant-shaped, single-tenant in practice:** the tenant entity is `businesses`, with a `business_users` membership table, but the deployment runs with exactly **one** `businesses` row. See `system_design.md` §3 for the auto-enroll trigger that makes this cost nothing operationally.
 
@@ -40,13 +40,13 @@ erDiagram
         text business_voice
         text target_audience
         text core_offerings
-        jsonb target_countries "read live by Meta Ads campaign-launch defaults; no Settings UI edits it today, see modules/settings.md §3"
+        jsonb target_countries "read by content-automation prompts; no Settings UI edits it, see modules/settings.md §3"
         text[] keywords
         jsonb guidelines
         jsonb business_colors
         uuid logo_asset_id FK "media_assets"
         jsonb settings
-        jsonb services "array of {name, description} — shared across Meta Ads/Social"
+        jsonb services "array of {name, description}, read by the Social image prompt"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -126,9 +126,9 @@ erDiagram
 
 There's no stored `public_url` column on `media_assets` — public URLs are derived at request time via Supabase Storage's `getPublicUrl(bucket, storage_path)`, not persisted.
 
-**`platform_connections` in practice today only has one real writer: Social Media, and only with `account_kind = "upload_post"`.** Accounts aren't connected via OAuth from Kinetix — they're connected by hand on upload-post.com's own dashboard; Kinetix's `/api/social/upload-post/sync` route mirrors that connection state into this table (plus the Facebook/LinkedIn Page IDs needed at publish time) purely for local display and lookup. The `access_token_ref`/`refresh_token_ref`/`scopes` columns shown above are part of the general-purpose shape but are unused by this writer — see `modules/social_media.md` §1 for the full mechanism. Meta Ads does not use this table at all as of today (it reads Meta credentials via `src/config/env.ts`'s zod schema — see `CLAUDE.md`'s Meta Ads section).
+**`platform_connections` in practice today only has one real writer: Social Media, and only with `account_kind = "upload_post"`.** Accounts aren't connected via OAuth from Kinetix — they're connected by hand on upload-post.com's own dashboard; Kinetix's `/api/social/upload-post/sync` route mirrors that connection state into this table (plus the Facebook/LinkedIn Page IDs needed at publish time) purely for local display and lookup. The `access_token_ref`/`refresh_token_ref`/`scopes` columns shown above are part of the general-purpose shape but are unused by this writer — see `modules/social_media.md` §1 for the full mechanism. Content automation's (not yet scheduled) publishing worker checks the same rows for connection status before publishing.
 
-**`upload_post_analytics_cache`** (added `20260806000000_upload_post_analytics_cache.sql`) exists purely so the Root and Social dashboards never call Upload-Post's own analytics API live — that API aggregates each connected platform server-side and can take several seconds, which a dashboard page load can't afford. `jobs/social-analytics-cache-refresh.job.ts` (cron, every 5 minutes) is the only writer; both dashboard routes only ever read it — see `system_design.md`'s "Never call a slow third-party API from a page-load GET route" note. One row per `(business_id, cache_key)`, upserted in place — this isn't an audit log, just a single current snapshot per key.
+**`upload_post_analytics_cache`** (added `20260806000000_upload_post_analytics_cache.sql`) is **unused**: nothing reads or writes it. It was built so the dashboards could avoid calling Upload-Post's analytics API live, but its refresh job was removed and both dashboard routes now call Upload-Post on every request (see `system_design.md` §2). The table was left in place rather than dropped.
 
 ## 3–6. Meta Ads — removed
 
@@ -201,7 +201,7 @@ Inngest jobs write with the service-role key, which bypasses RLS entirely — ex
 
 ## 10. Media & Captions
 
-`media_assets.metadata` also holds the AssemblyAI transcript and word-level timing for any video with dynamic subtitles (used to burn in synced captions during final video assembly) — no dedicated column for this.
+`media_assets.metadata` holds per-asset details with no dedicated column. For content automation that includes the media probe (`metadata.probe`), the logo placement (`metadata.logo`), the LinkedIn image's text hook (`metadata.hook`) and the video end card (`metadata.endCard`); see `content_automation.md` §10.
 
 ## 11. History — how this schema got here
 
@@ -220,11 +220,21 @@ Inngest jobs write with the service-role key, which bypasses RLS entirely — ex
 13. **`businesses.*_analysis_schedule_*`** (`20260804000000_business_analysis_schedules.sql`) — adds `competitor_analysis_schedule_day/hour/last_run_at` and `self_ad_analysis_schedule_day/hour/last_run_at` (day 0-6, hour 0-23, CHECK-constrained, both default Monday/0). Replaced the two analysis jobs' hardcoded weekly cron expressions with a per-business day/hour, checked hourly — see `system_design.md` §2.D.
 14. **Dropped `chk_meta_ad_creatives_service`** (`20260805000000_drop_stale_service_check.sql`) — this CHECK constraint hardcoded 3 service names from an earlier single-service setup and was silently rejecting ad-creative-generation inserts for any newer/renamed service, now that `businesses.services` is business-configurable via Settings.
 15. **`upload_post_analytics_cache`** (`20260806000000_upload_post_analytics_cache.sql`) — added so the Root/Social dashboards could stop calling Upload-Post's analytics API live (a measured ~several-second round trip), kept warm by a 5-minute Inngest job. **That job was later removed** — both dashboard routes now call Upload-Post live again on every request, by deliberate choice (see `system_design.md` §2's note on Leads/dashboards calling their APIs live). The table itself is still here, just unused.
-16. **`ad_analysis_reports` dropped, plus its `businesses` schedule/config columns** (`20260816000000_remove_self_ad_competitor_analysis.sql`) — unlike #15 above, this one actually drops rather than just orphans: `ad_analysis_reports` (both `report_type`s), `businesses.competitor_analysis_schedule_day/hour/last_run_at`, `businesses.self_ad_analysis_schedule_day/hour/last_run_at`, `businesses.competitor_keywords`, and `businesses.ad_script_topics` are all gone, along with the two jobs, the Settings "Competitor Intelligence"/"Analysis Schedule" tabs, and every ad-generation prompt section that read either report type — see §5 above and `modules/meta_ads.md` §1.
+16. **`ad_analysis_reports` dropped, plus its `businesses` schedule/config columns** (`20260816000000_remove_self_ad_competitor_analysis.sql`) — unlike #15 above, this one actually drops rather than just orphans: `ad_analysis_reports` (both `report_type`s), `businesses.competitor_analysis_schedule_day/hour/last_run_at`, `businesses.self_ad_analysis_schedule_day/hour/last_run_at`, `businesses.competitor_keywords`, and `businesses.ad_script_topics` are all gone, along with the two jobs, the Settings "Competitor Intelligence"/"Analysis Schedule" tabs, and every ad-generation prompt section that read either report type — the Meta Ads module itself was removed later (#17).
 
 17. **Meta Ads removed** (`20261104000000_remove_meta_ads.sql`) — drops `studio_messages`, `ad_performance_daily`, `leads`, `studio_sessions`, `ads`, `ad_sets`, `campaigns`, `meta_ad_creatives` and the `campaign_status` enum.
 
 18. **`businesses.video_reference_*` dropped** (`20261105000000_drop_video_reference.sql`) — the Social AI video pipeline that read them was removed; video is generated only by content automation.
+
+19. **Outreach removed** (`20261101000000_remove_outreach.sql`). See §8.
+
+20. **Content automation** (all applied; details in `content_automation.md`):
+    - `20261031000000_content_automation_schema.sql`: the 12 tables, the `social_posts` extensions, rotation and publishing functions, RLS.
+    - `20261102000000_content_manual_trigger.sql`: video format/duration on revisions, proposed schedules, `auto_run_enabled`, the manual "Generate now" trigger.
+    - `20261103000000_content_cycle_week_plan.sql`: `content_generation_cycles.week_plan`.
+    - `20261106000000_content_blog_pipeline.sql`: the display-only `blog` pipeline and `blog_frequency_per_week`.
+    - `20261107000000_content_delete.sql`: `delete_content_item` (permanent gallery delete).
+    - `20261112134926_content_trigger_exact_jobs.sql`: "Generate now" creates exactly the requested jobs.
 
 ## 12. Worked Examples
 
