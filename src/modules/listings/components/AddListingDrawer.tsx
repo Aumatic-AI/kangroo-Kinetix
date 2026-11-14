@@ -41,8 +41,8 @@ function PhotoGrid({ photos, onRemove }: { photos: File[]; onRemove: (index: num
 
 /**
  * Manual "Add listing" form. Most of the inventory still arrives via the
- * import; this covers one-off additions. A new listing is active and joins
- * the end of the rotation.
+ * import; this covers one-off additions. A new listing is active and, never
+ * having been promoted, is picked ahead of listings that already have been.
  */
 export function AddListingDrawer({
   open,
@@ -111,7 +111,7 @@ export function AddListingDrawer({
         <form onSubmit={submit} className="flex flex-1 flex-col min-h-0">
           <DrawerHeader>
             <DrawerTitle>Add listing</DrawerTitle>
-            <DrawerDescription>New listings are active and join the end of the content rotation.</DrawerDescription>
+            <DrawerDescription>New listings are active and enter the content rotation right away.</DrawerDescription>
           </DrawerHeader>
 
           <div className="flex-1 overflow-y-auto px-6 pt-5 pb-6 space-y-5">

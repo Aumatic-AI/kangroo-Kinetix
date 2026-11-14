@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
  * Add a listing by hand (the bulk of the inventory still comes from the import).
  * Photos are uploaded by the browser straight to business_media first, so only
  * their URLs arrive here. RLS lets only editors and above insert. New listings
- * join the rotation at the end (rotation_seq is assigned by the database).
+ * enter the rotation immediately: with zero promotions they rank ahead of listings
+ * already promoted (rotation_seq, assigned by the database, only breaks ties).
  */
 export async function POST(request: NextRequest) {
   try {
