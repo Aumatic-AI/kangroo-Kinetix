@@ -38,7 +38,7 @@ export const generateContentJob = inngest.createFunction(
 
     const job = await step.run("load-job", async () => {
       const { data: q } = await supabase.from("content_generation_queue")
-        .select("id, business_id, cycle_id, property_id, pipeline_type, slot_index, generation_status, locked_by, generation_attempts")
+        .select("id, business_id, cycle_id, property_id, pipeline_type, slot_index, content_type, generation_status, locked_by, generation_attempts")
         .eq("id", queueId).single();
       if (!q || q.generation_status !== "processing" || q.locked_by !== worker || !q.property_id) return null;
       const { data: c } = await supabase.from("content_generation_cycles").select("environment").eq("id", q.cycle_id).single();
@@ -50,6 +50,9 @@ export const generateContentJob = inngest.createFunction(
       const result = await generateCreative(step, {
         mode: "job", businessId: job.business_id, propertyId: job.property_id!, pipeline: job.pipeline_type as "social" | "linkedin" | "blog",
         cycleId: job.cycle_id, environment: job.environment, queueId, slotIndex: job.slot_index, worker,
+        // A social job's image/video type is chosen by the user (Generate now / weekly frequencies) and set
+        // on the queue row when it's created. NULL (older jobs) leaves the choice to the AI.
+        forceType: job.pipeline_type === "social" && (job.content_type === "image" || job.content_type === "video") ? job.content_type : null,
       });
       await step.run("complete-job", () => rpc("complete_generation_job", { p_queue: queueId, p_worker: worker }));
       await step.sendEvent("next-batch", { name: "content/process-queue", data: {} });
@@ -131,16 +134,19 @@ export const weeklyContentCycle = inngest.createFunction(
   async ({ step }) => {
     const created = await step.run("create-cycles", async () => {
       const { data: rows } = await supabase.from("content_automation_settings")
-        .select("business_id, automation_mode, social_frequency_per_week, linkedin_frequency_per_week, blog_frequency_per_week, generation_timezone")
+        .select("business_id, automation_mode, social_image_frequency_per_week, social_video_frequency_per_week, linkedin_frequency_per_week, blog_frequency_per_week, generation_timezone")
         .eq("is_enabled", true).eq("auto_run_enabled", true);
       const out: { businessId: string; cycleId: string }[] = [];
       for (const s of rows ?? []) {
-        if (s.social_frequency_per_week + s.linkedin_frequency_per_week + s.blog_frequency_per_week < 1) continue;
+        const social = s.social_image_frequency_per_week + s.social_video_frequency_per_week;
+        if (social + s.linkedin_frequency_per_week + s.blog_frequency_per_week < 1) continue;
         const today = new Intl.DateTimeFormat("en-CA", { timeZone: s.generation_timezone }).format(new Date());
         const weekStart = addDays(mondayOf(today), 7);   // the FOLLOWING Monday-start week
         await supabase.from("content_generation_cycles").upsert(
           { business_id: s.business_id, environment: s.automation_mode, week_start: weekStart,
-            social_target_count: s.social_frequency_per_week, linkedin_target_count: s.linkedin_frequency_per_week,
+            // ensure_cycle_slots gives each social slot its type, spreading the videos through the week.
+            social_target_count: social, social_video_target_count: s.social_video_frequency_per_week,
+            linkedin_target_count: s.linkedin_frequency_per_week,
             blog_target_count: s.blog_frequency_per_week },
           { onConflict: "business_id,environment,week_start", ignoreDuplicates: true });
         const { data: cycle } = await supabase.from("content_generation_cycles").select("id")

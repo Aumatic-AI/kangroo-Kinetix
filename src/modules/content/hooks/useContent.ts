@@ -61,7 +61,7 @@ export function useAutomationSettings() {
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (patch: Partial<Pick<AutomationSettings, "socialFrequency" | "linkedinFrequency" | "blogFrequency" | "isEnabled">>) =>
+    mutationFn: async (patch: Partial<Pick<AutomationSettings, "socialImageFrequency" | "socialVideoFrequency" | "linkedinFrequency" | "blogFrequency" | "isEnabled">>) =>
       (await fetchJson<{ settings: AutomationSettings }>("/api/content/settings", {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
       })).settings,
@@ -73,7 +73,7 @@ export function useUpdateSettings() {
 export function useTriggerGeneration() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (counts: { social: number; linkedin: number; blog?: number }) =>
+    mutationFn: (counts: { socialImage: number; socialVideo: number; linkedin: number; blog: number }) =>
       fetchJson<{ success: true; cycleId: string }>("/api/content/trigger", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(counts),
       }),

@@ -5,8 +5,8 @@ import type { AutomationSettings } from "@/modules/content/types/content.types";
 
 type SettingsUpdate = Database["public"]["Tables"]["content_automation_settings"]["Update"];
 
-type Row = { social_frequency_per_week: number; linkedin_frequency_per_week: number; blog_frequency_per_week: number; automation_mode: string; is_enabled: boolean; auto_run_enabled: boolean; generation_timezone: string };
-const COLS = "social_frequency_per_week, linkedin_frequency_per_week, blog_frequency_per_week, automation_mode, is_enabled, auto_run_enabled, generation_timezone";
+type Row = { social_image_frequency_per_week: number; social_video_frequency_per_week: number; linkedin_frequency_per_week: number; blog_frequency_per_week: number; automation_mode: string; is_enabled: boolean; auto_run_enabled: boolean; generation_timezone: string };
+const COLS = "social_image_frequency_per_week, social_video_frequency_per_week, linkedin_frequency_per_week, blog_frequency_per_week, automation_mode, is_enabled, auto_run_enabled, generation_timezone";
 
 async function load(): Promise<{ supabase: Awaited<ReturnType<typeof createClient>>; businessId: string; canAdmin: boolean; row: Row }> {
   const supabase = await createClient();
@@ -27,7 +27,7 @@ async function load(): Promise<{ supabase: Awaited<ReturnType<typeof createClien
 }
 
 const toBody = (row: Row, canAdmin: boolean): AutomationSettings => ({
-  socialFrequency: row.social_frequency_per_week, linkedinFrequency: row.linkedin_frequency_per_week, blogFrequency: row.blog_frequency_per_week,
+  socialImageFrequency: row.social_image_frequency_per_week, socialVideoFrequency: row.social_video_frequency_per_week, linkedinFrequency: row.linkedin_frequency_per_week, blogFrequency: row.blog_frequency_per_week,
   mode: row.automation_mode as "testing" | "live", isEnabled: row.is_enabled, autoRunEnabled: row.auto_run_enabled,
   timezone: row.generation_timezone, canAdmin,
 });
@@ -55,13 +55,16 @@ export async function PATCH(request: Request) {
     const { supabase, businessId, canAdmin, row } = await load();
     const update: SettingsUpdate = {};
 
-    for (const [key, col] of [["socialFrequency", "social_frequency_per_week"], ["linkedinFrequency", "linkedin_frequency_per_week"], ["blogFrequency", "blog_frequency_per_week"]] as const) {
+    for (const [key, col] of [["socialImageFrequency", "social_image_frequency_per_week"], ["socialVideoFrequency", "social_video_frequency_per_week"], ["linkedinFrequency", "linkedin_frequency_per_week"], ["blogFrequency", "blog_frequency_per_week"]] as const) {
       if (body[key] !== undefined) {
         const n = Number(body[key]);
         if (!Number.isInteger(n) || n < 0 || n > 14) return NextResponse.json({ error: `${key} must be a whole number from 0 to 14` }, { status: 400 });
         update[col] = n;
       }
     }
+    // Images and videos share the social pipeline's 14-per-week cap.
+    const socialTotal = (update.social_image_frequency_per_week ?? row.social_image_frequency_per_week) + (update.social_video_frequency_per_week ?? row.social_video_frequency_per_week);
+    if (socialTotal > 14) return NextResponse.json({ error: "Social images and videos together can't be more than 14 per week" }, { status: 400 });
     if (body.mode !== undefined) {
       if (body.mode !== "testing") return NextResponse.json({ error: "Live mode isn't available yet — publishing hasn't been built. Testing mode only." }, { status: 400 });
       update.automation_mode = "testing";

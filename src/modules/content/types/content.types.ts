@@ -163,7 +163,8 @@ export interface ActivityResponse {
 }
 
 export interface AutomationSettings {
-  socialFrequency: number;
+  socialImageFrequency: number;
+  socialVideoFrequency: number;
   linkedinFrequency: number;
   blogFrequency: number;
   mode: "testing" | "live";

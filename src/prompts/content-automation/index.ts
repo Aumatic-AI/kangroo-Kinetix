@@ -147,7 +147,9 @@ ${strategyKnowledge(SOCIAL_FRAMEWORKS, SOCIAL_HOOK_TYPES)}
 THE ATTACHED IMAGES are the listing's real reference photos. Everything you show or say about the space must come from them or from the listing facts.
 FIRST, look closely and list 4–6 "space_details": concrete things you can SEE — objects, fixtures, materials, colours, furniture (e.g. "LED-screen stage with purple lighting", "white blossom-tree centrepieces", "gold chiavari chairs", "navy walls", "floor-to-ceiling windows"). No vague items ("elegant decor", "vibrant atmosphere"). Build the shots, the narration and the hook from them.
 
-FORMAT: you decide whether this creative is an IMAGE post or a VIDEO. Choose "video" when the space and event suit motion and a narrated tour; choose "image" for a single strong visual idea. Images are text-free too: one message, one focal point, the real space big and believable, readable at thumbnail size.
+${args.forceType
+    ? `FORMAT: this creative is ${args.forceType === "video" ? "a VIDEO" : "an IMAGE post"} — the format was chosen by the user, so "content_type" must be "${args.forceType}". Build the best ${args.forceType} idea this listing supports.`
+    : `FORMAT: you decide whether this creative is an IMAGE post or a VIDEO. Choose "video" when the space and event suit motion and a narrated tour; choose "image" for a single strong visual idea.`} Images are text-free too: one message, one focal point, the real space big and believable, readable at thumbnail size.
 
 ${VIDEO_CRAFT}`;
 

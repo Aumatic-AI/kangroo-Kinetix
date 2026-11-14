@@ -110,7 +110,8 @@ export function GalleryPage() {
   const [selected, setSelected] = useState<{ id: string; title: string } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   // What "Generate now" creates: each type can be switched off, at least one must stay on.
-  const [include, setInclude] = useState({ social: true, linkedin: true, blog: true });
+  // Social is split by format — the user decides image vs video, the AI follows it.
+  const [include, setInclude] = useState({ socialImage: true, socialVideo: true, linkedin: true, blog: true });
 
   const settings = useAutomationSettings();
   const trigger = useTriggerGeneration();
@@ -138,7 +139,10 @@ export function GalleryPage() {
   const enabled = settings.data?.isEnabled ?? false;
   const generate = async () => {
     try {
-      await trigger.mutateAsync({ social: include.social ? 1 : 0, linkedin: include.linkedin ? 1 : 0, blog: include.blog ? 1 : 0 });
+      await trigger.mutateAsync({
+        socialImage: include.socialImage ? 1 : 0, socialVideo: include.socialVideo ? 1 : 0,
+        linkedin: include.linkedin ? 1 : 0, blog: include.blog ? 1 : 0,
+      });
       setConfirmOpen(false);
       setPage(1);
     } catch {
@@ -217,7 +221,8 @@ export function GalleryPage() {
         details={
           <dl className="text-sm space-y-3">
             {([
-              ["social", "Social creative", "image or video, AI decides (TikTok, Instagram, Facebook)"],
+              ["socialImage", "Social image", "one 4:5 image for TikTok, Instagram and Facebook"],
+              ["socialVideo", "Social video", "one 30-second vertical video for TikTok, Instagram and Facebook"],
               ["linkedin", "LinkedIn post", "text + image"],
               ["blog", "Blog post", "detailed article; the AI chooses the format and writes its images"],
             ] as const).map(([key, label, hint]) => (
@@ -233,7 +238,7 @@ export function GalleryPage() {
           </dl>
         }
         confirmLabel="Generate"
-        confirmDisabled={!include.social && !include.linkedin && !include.blog}
+        confirmDisabled={!Object.values(include).some(Boolean)}
         loading={trigger.isPending}
         error={trigger.error?.message}
         onConfirm={generate}

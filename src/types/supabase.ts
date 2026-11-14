@@ -184,7 +184,9 @@ export type Database = {
           linkedin_frequency_per_week: number
           mode_changed_at: string | null
           mode_changed_by: string | null
-          social_frequency_per_week: number
+          social_frequency_per_week: number | null
+          social_image_frequency_per_week: number
+          social_video_frequency_per_week: number
           updated_at: string
         }
         Insert: {
@@ -199,7 +201,9 @@ export type Database = {
           linkedin_frequency_per_week?: number
           mode_changed_at?: string | null
           mode_changed_by?: string | null
-          social_frequency_per_week?: number
+          social_frequency_per_week?: number | null
+          social_image_frequency_per_week?: number
+          social_video_frequency_per_week?: number
           updated_at?: string
         }
         Update: {
@@ -214,7 +218,9 @@ export type Database = {
           linkedin_frequency_per_week?: number
           mode_changed_at?: string | null
           mode_changed_by?: string | null
-          social_frequency_per_week?: number
+          social_frequency_per_week?: number | null
+          social_image_frequency_per_week?: number
+          social_video_frequency_per_week?: number
           updated_at?: string
         }
         Relationships: [
@@ -329,6 +335,7 @@ export type Database = {
           id: string
           linkedin_target_count: number
           social_target_count: number
+          social_video_target_count: number
           started_at: string | null
           status: string
           updated_at: string
@@ -345,6 +352,7 @@ export type Database = {
           id?: string
           linkedin_target_count?: number
           social_target_count?: number
+          social_video_target_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -361,6 +369,7 @@ export type Database = {
           id?: string
           linkedin_target_count?: number
           social_target_count?: number
+          social_video_target_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -1567,7 +1576,12 @@ export type Database = {
       }
       retry_failed_publish: { Args: { p_post: string }; Returns: string }
       trigger_manual_content_cycle: {
-        Args: { p_blog?: number; p_linkedin?: number; p_social?: number }
+        Args: {
+          p_blog?: number
+          p_linkedin?: number
+          p_social_image?: number
+          p_social_video?: number
+        }
         Returns: string
       }
       unknown_publish_posts: {
