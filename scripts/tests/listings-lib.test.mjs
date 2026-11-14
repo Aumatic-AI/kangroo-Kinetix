@@ -58,3 +58,15 @@ test("toSummary: lowest-position image becomes the thumbnail; unknown status fal
   assert.equal(toSummary({ ...row, property_images: [] }, null).thumbnailUrl, null);
   assert.equal(toSummary({ ...row, property_images: null, status: "weird" }, null).status, "active");
 });
+
+test("parseNewListing: requires a name and 1-5 http(s) photos, normalises the rest", async () => {
+  const { parseNewListing } = await import("../../src/modules/listings/lib/listings.ts");
+  const img = "https://example.com/a.jpg";
+  assert.deepEqual(parseNewListing({ title: "  ", imageUrls: [img] }), { ok: false, error: "Name is required" });
+  assert.equal(parseNewListing({ title: "Loft" }).ok, false);
+  assert.equal(parseNewListing({ title: "Loft", imageUrls: Array(6).fill(img) }).ok, false);
+  assert.equal(parseNewListing({ title: "Loft", imageUrls: ["javascript:alert(1)"] }).ok, false);
+  const r = parseNewListing({ title: " Sunny   Loft ", spaceCategory: "", city: " Toronto ", eventTypes: "Party, party ,Workshop,,", imageUrls: [img, " "] });
+  assert.deepEqual(r, { ok: true, value: { title: "Sunny Loft", spaceCategory: null, city: "Toronto", eventTypes: ["Party", "Workshop"], imageUrls: [img] } });
+  assert.deepEqual(parseNewListing({ title: "X", eventTypes: ["A", 3, "a"], imageUrls: [img] }).value.eventTypes, ["A"]);
+});

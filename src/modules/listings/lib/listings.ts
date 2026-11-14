@@ -74,3 +74,52 @@ export function toSummary(row: SummaryRow, lastPromotedAt: string | null): Listi
 export const ENVIRONMENT_LABEL = { testing: "Testing", live: "Live" } as const;
 export const PIPELINE_LABEL = { social: "Social", linkedin: "LinkedIn" } as const;
 export const CONTENT_TYPE_LABEL = { video: "Video", image: "Image", text_image: "Text + image" } as const;
+
+export const MAX_LISTING_IMAGES = 5;
+
+export interface NewListingInput {
+  title: string;
+  spaceCategory: string | null;
+  city: string | null;
+  eventTypes: string[];
+  imageUrls: string[];
+}
+
+const clean = (v: unknown, max: number): string | null => {
+  if (typeof v !== "string") return null;
+  const s = v.replace(/\s+/g, " ").trim();
+  return s ? s.slice(0, max) : null;
+};
+
+function isHttpUrl(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** Validates a create-listing body. Event types may arrive as an array or a
+ * comma-separated string; duplicates (case-insensitive) are dropped. */
+export function parseNewListing(body: unknown): { ok: true; value: NewListingInput } | { ok: false; error: string } {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const title = clean(b.title, 200);
+  if (!title) return { ok: false, error: "Name is required" };
+
+  const rawEvents = Array.isArray(b.eventTypes) ? b.eventTypes : typeof b.eventTypes === "string" ? b.eventTypes.split(",") : [];
+  const seen = new Set<string>();
+  const eventTypes: string[] = [];
+  for (const e of rawEvents) {
+    const s = clean(e, 60);
+    if (s && !seen.has(s.toLowerCase())) { seen.add(s.toLowerCase()); eventTypes.push(s); }
+  }
+  if (eventTypes.length > 30) return { ok: false, error: "Too many event types (max 30)" };
+
+  const imageUrls = Array.isArray(b.imageUrls) ? b.imageUrls.filter((u): u is string => typeof u === "string").map((u) => u.trim()).filter(Boolean) : [];
+  if (imageUrls.length === 0) return { ok: false, error: "Add at least one photo" };
+  if (imageUrls.length > MAX_LISTING_IMAGES) return { ok: false, error: `At most ${MAX_LISTING_IMAGES} photos` };
+  if (!imageUrls.every(isHttpUrl)) return { ok: false, error: "Every photo must be an http(s) URL" };
+
+  return { ok: true, value: { title, spaceCategory: clean(b.spaceCategory, 100), city: clean(b.city, 100), eventTypes, imageUrls } };
+}

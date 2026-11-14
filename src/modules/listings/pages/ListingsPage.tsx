@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Search } from "lucide-react";
+import { Eye, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -11,6 +11,7 @@ import { PAGE_SIZE_COMPACT } from "@/lib/pagination";
 import { formatDate } from "@/utils/datetime";
 import { useListings } from "../hooks/useListings";
 import { ListingDrawer } from "../components/ListingDrawer";
+import { AddListingDrawer } from "../components/AddListingDrawer";
 import { ListingStatusChip, ListingThumb } from "../components/ListingBits";
 import type { ListingStatus } from "../types/listings.types";
 
@@ -65,8 +66,8 @@ function ListingsTableSkeleton() {
  * The property inventory the content automation rotates through. The table is
  * deliberately light — thumbnail, name, city, category, status, last promoted —
  * and opening a row shows every image and the full details (ListingDrawer).
- * Listings come from the inventory import, not from a create form, so there is
- * no "add" action here.
+ * Most listings come from the inventory import; "Add listing" covers one-off
+ * additions (AddListingDrawer).
  */
 export function ListingsPage() {
   const [page, setPage] = useState(1);
@@ -75,6 +76,7 @@ export function ListingsPage() {
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [selected, setSelected] = useState<{ id: string; title: string } | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setSearch(query.trim()); setPage(1); }, SEARCH_DEBOUNCE_MS);
@@ -98,12 +100,15 @@ export function ListingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
-      <div>
-        <h2 className="text-2xl font-bold text-text">Listings</h2>
-        <p className="text-sm text-muted mt-1">
-          The properties and venues Kangrooo promotes. Open one to see its images and full details.
-          {data && total > 0 && <> {total} listing{total === 1 ? "" : "s"} · {data.counts.active} active.</>}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-text">Listings</h2>
+          <p className="text-sm text-muted mt-1">
+            The properties and venues Kangrooo promotes. Open one to see its images and full details.
+            {data && total > 0 && <> {total} listing{total === 1 ? "" : "s"} · {data.counts.active} active.</>}
+          </p>
+        </div>
+        <Button icon={<Plus />} onClick={() => setAdding(true)} className="shrink-0">Add listing</Button>
       </div>
 
       <div className="flex items-center gap-3">
@@ -130,7 +135,7 @@ export function ListingsPage() {
       ) : !data || data.listings.length === 0 ? (
         <div className="py-16 text-center border border-default rounded-2xl border-dashed space-y-2">
           <p className="text-sm text-muted">
-            {filtered ? "No listings match these filters." : "No listings yet — they appear here once the property inventory is imported."}
+            {filtered ? "No listings match these filters." : "No listings yet — import the property inventory or add one with \"Add listing\"."}
           </p>
         </div>
       ) : (
@@ -184,6 +189,7 @@ export function ListingsPage() {
       )}
 
       <ListingDrawer listingId={selected?.id ?? null} title={selected?.title} onClose={() => setSelected(null)} />
+      <AddListingDrawer open={adding} onOpenChange={setAdding} categories={data?.categories ?? []} onCreated={setSelected} />
     </div>
   );
 }
