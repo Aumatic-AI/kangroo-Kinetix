@@ -1,13 +1,5 @@
 import { create } from 'zustand';
 
-export interface BusinessService {
-  name: string;
-  /** Optional — lets AI-facing features
-   * know what this service actually means for this business, not just its
-   * bare name. Nothing requires filling it in. */
-  description?: string | null;
-}
-
 // Basic business info only — see src/app/api/business/route.ts for why
 // the deeper AI/competitor-analysis config isn't part of this.
 export interface BusinessInfo {
@@ -16,7 +8,6 @@ export interface BusinessInfo {
   website_url: string | null;
   logo_asset_id: string | null;
   industry: string | null;
-  services: BusinessService[];
 }
 
 interface BusinessState {

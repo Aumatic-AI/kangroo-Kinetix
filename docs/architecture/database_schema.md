@@ -46,7 +46,7 @@ erDiagram
         jsonb business_colors
         uuid logo_asset_id FK "media_assets"
         jsonb settings
-        jsonb services "array of {name, description}, read by the Social image prompt"
+        jsonb services "array of {name, description}; unused (no UI or reader)"
         timestamptz created_at
         timestamptz updated_at
     }

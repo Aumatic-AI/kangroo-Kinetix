@@ -17,8 +17,6 @@ export async function GET() {
     const { data: business, error } = await supabase.from("businesses").select("*").limit(1).single();
     if (error || !business) return NextResponse.json({ error: "No business found" }, { status: 404 });
 
-    const services = Array.isArray(business.services) ? (business.services as Record<string, any>[]) : [];
-
     const settings: BusinessSettings = {
       name: business.name || "",
       industry: business.industry || "",
@@ -32,7 +30,6 @@ export async function GET() {
       coreOfferings: business.core_offerings || "",
       painPoints: business.pain_points || "",
       targetAudience: business.target_audience || "",
-      services: services.map((s) => ({ name: s.name || "", description: s.description || undefined })),
       targetCountries: Array.isArray(business.target_countries) ? (business.target_countries as string[]) : [],
     };
 
@@ -69,7 +66,6 @@ export async function POST(request: Request) {
         core_offerings: body.coreOfferings || null,
         pain_points: body.painPoints || null,
         target_audience: body.targetAudience || null,
-        services: body.services.filter((s) => s.name.trim()) as any,
         target_countries: body.targetCountries,
       })
       .eq("id", business.id);

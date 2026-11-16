@@ -8,13 +8,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UnsavedChangesBar } from "@/components/ui/UnsavedChangesBar";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { BusinessSettings } from "../types/settings.types";
-import { Field, ServicesEditor, LogoUploader } from "../components/shared";
+import { Field, LogoUploader } from "../components/shared";
 import { UsageSettings } from "../components/UsageSettings";
 
 const SETTINGS_TABS = [
   { value: "general", label: "General" },
   { value: "voice", label: "Brand & Voice" },
-  { value: "services", label: "Services" },
   { value: "usage", label: "Usage" },
 ];
 
@@ -134,12 +133,6 @@ export function SettingsPage() {
               </Field>
               <Field label="Target Audience"><Textarea value={form.targetAudience} onChange={(e) => patch({ targetAudience: e.target.value })} rows={2} /></Field>
             </div>
-          </Section>
-      )}
-
-      {activeTab === "services" && (
-          <Section title="Services" description="What this business actually offers — used so AI-facing features know what each service means.">
-            <ServicesEditor services={form.services} onChange={(services) => patch({ services })} />
           </Section>
       )}
 

@@ -1,7 +1,6 @@
 /**
  * Shape of GET/POST /api/settings — camelCase mirror of the businesses
- * table's columns that are actually read somewhere in the app today
- * (see src/store/business.store.ts's BusinessService).
+ * table's columns edited on the Settings page.
  * businesses.keywords/guidelines are deliberately left out — they have no
  * defined shape and nothing in the app reads them yet, so building a
  * settings UI for them would just be guessing. business_colors now has a
@@ -9,11 +8,6 @@
  * Studio's video generation for real branded signage/graphics (see
  * `brandColor` below).
  */
-
-export interface BusinessServiceInput {
-  name: string;
-  description?: string;
-}
 
 export interface BusinessSettings {
   name: string;
@@ -28,6 +22,5 @@ export interface BusinessSettings {
   coreOfferings: string;
   painPoints: string;
   targetAudience: string;
-  services: BusinessServiceInput[];
   targetCountries: string[];
 }

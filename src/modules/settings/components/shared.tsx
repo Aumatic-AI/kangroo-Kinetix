@@ -4,7 +4,6 @@ import { Search, Check, X, Upload } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Loader } from "@/components/ui/Loader";
-import { BusinessServiceInput } from "../types/settings.types";
 import { useUploadLogo } from "../hooks/useSettings";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -51,30 +50,6 @@ export function TagInput({ values, onChange, placeholder }: { values: string[]; 
         onBlur={commit}
         placeholder={placeholder || "Type and press Enter"}
       />
-    </div>
-  );
-}
-
-export function ServicesEditor({ services, onChange }: { services: BusinessServiceInput[]; onChange: (next: BusinessServiceInput[]) => void }) {
-  const update = (i: number, patch: Partial<BusinessServiceInput>) => onChange(services.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const remove = (i: number) => onChange(services.filter((_, idx) => idx !== i));
-
-  return (
-    <div className="space-y-3">
-      {services.map((s, i) => (
-        <div key={i} className="flex gap-2 items-start">
-          <div className="flex-1 grid grid-cols-2 gap-2">
-            <Input value={s.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="Service name" />
-            <Input value={s.description || ""} onChange={(e) => update(i, { description: e.target.value })} placeholder="Description (optional)" />
-          </div>
-          <button type="button" onClick={() => remove(i)} title="Remove" className="text-muted hover:text-danger p-2.5 shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
-      <button type="button" onClick={() => onChange([...services, { name: "", description: "" }])} className="text-xs font-semibold text-primary hover:underline">
-        + Add another service
-      </button>
     </div>
   );
 }

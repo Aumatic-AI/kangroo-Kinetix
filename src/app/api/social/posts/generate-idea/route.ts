@@ -23,7 +23,6 @@ export async function POST(request: Request) {
     const prompt = getSocialIdeaPrompt(business, {
       format: body.format,
       ideaPrompt: body.ideaPrompt,
-      service: body.service,
     });
 
     const responseText = (await aiOrchestrator.executeTask("analysis", prompt.user, "openai", { systemPrompt: prompt.system })) as string;

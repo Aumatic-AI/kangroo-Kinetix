@@ -177,7 +177,6 @@ export function formatPlatformCaptions(meta: CaptionMetadata, platforms: SocialP
 export interface SocialIdeaPromptInput {
   format: "image" | "video" | "text";
   ideaPrompt: string;
-  service?: string;
 }
 
 export function getSocialIdeaPrompt(business: any, input: SocialIdeaPromptInput) {
@@ -186,7 +185,6 @@ export function getSocialIdeaPrompt(business: any, input: SocialIdeaPromptInput)
   const system = `You are a social media content strategist for ${businessName}, a ${business?.industry || "business"}.
 
 ${businessContextBlock(business)}
-${input.service ? `\nTHIS IDEA IS SPECIFICALLY FOR: ${input.service}. All 3 variations must be about this service — never blend in another.\n` : ""}
 YOUR JOB
 Take the short user input describing a topic, offer, or moment, then expand it into 3 emotionally distinct variations of the same idea — each a content description for one ${input.format} post (not a finished caption, just what the post should show and be about).
 

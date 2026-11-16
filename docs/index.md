@@ -9,7 +9,7 @@ Welcome to the **Kinetix** documentation. Kinetix is a single-tenant Marketing A
 3. **Social Media Management** (`/social`) — Multi-platform (TikTok, LinkedIn, YouTube, Facebook, Instagram, X) content generation, scheduling, and publishing. *(active)*
 4. **Content Automation** (`/content` Gallery, `/content/automation` Automation): AI-generated property content (an image or a narrated 30 s video for TikTok·Instagram·Facebook, text + image for LinkedIn, and display-only blog posts) with AI-proposed posting times, reviewed in a gallery. *Testing phase: started manually with "Generate now", never published.* See `architecture/content_automation.md`. Product requirements: [`kangrooo-content-automation-spec.md`](kangrooo-content-automation-spec.md), with an implementation-status section at the top.
 5. **Listings** (`/listings`): the property inventory the content automation rotates through. *(active)*
-6. **Settings** (`/settings`): business identity, brand voice, services and a usage estimate. One page, no sub-routes. *(active)*
+6. **Settings** (`/settings`): business identity, brand voice and a usage estimate. One page, no sub-routes. *(active)*
 
 Every list page (Social Posts, Listings, the Content Gallery) uses one shared pagination system; see `architecture/system_design.md` §6.
 
@@ -33,7 +33,7 @@ To understand the system deeply without scanning source code, refer to the follo
 ### 2. Core Modules
 - [`modules/listings.md`](modules/listings.md) — The property inventory (`/listings`): searchable table, image/detail drawer, rotation status and activate/deactivate.
 - [`modules/social_media.md`](modules/social_media.md) — AI content generation, per-platform preview, scheduling, and publishing via Upload-Post.
-- [`modules/settings.md`](modules/settings.md): the one Settings page (business identity, voice, services, usage estimate).
+- [`modules/settings.md`](modules/settings.md): the one Settings page (business identity, voice, usage estimate).
 
 ### Other reference
 - [`kangrooo-content-automation-spec.md`](kangrooo-content-automation-spec.md): the product requirements, with an implementation-status section.
