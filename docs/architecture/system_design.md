@@ -15,7 +15,8 @@ graph TD
     Jobs -- "Read/Write" --> Supabase
     Jobs -- "HTTP APIs" --> AI["OpenAI / Kie AI"]
     Jobs -- "Render (logo, end card)" --> FFmpeg["FFmpeg renderer (Upload-Post)"]
-    Jobs -- "Publish (Social module only)" --> Platforms["Social Platforms (via Upload-Post)"]
+    Jobs -- "Publish (Social module + Live automation posts)" --> Platforms["Social Platforms (via Upload-Post)"]
+    Jobs -- "Publish Live blogs only" --> WordPress["WordPress (blog.kangrooo.ca REST API)"]
 ```
 
 ## 2. Component Responsibilities
@@ -33,7 +34,7 @@ graph TD
 - **Auth:** Supabase Auth only. RLS's `auth.uid()` requires Supabase-issued JWTs — there is no separate NextAuth session layer in this app.
 - **Database:** PostgreSQL. Every piece of client data belongs to a `business`, not directly to a `user` — see §3. Users join a business via the `business_users` junction table.
 - **Security:** RLS policies ensure a user can only read/write rows where a `business_users` row links their `auth.uid()` to that row's `business_id`. With one business today, every user simply has one `business_users` row (auto-created — see §3) — functionally equivalent to a simpler model, but the isolation is real and already enforced, not bolted on later.
-- **Secrets:** provider keys (`OPENAI_API_KEY`, `KIE_API_KEY`, `UPLOAD_POST_API_KEY`, …) are server-only environment variables read through `src/config/env.ts`. Nothing in `src/` reads Supabase Vault. The `api_credentials`/`platform_connections` `*_ref` columns exist in the schema but are unused, and Kinetix holds no social OAuth tokens because accounts are connected on Upload-Post (`modules/social_media.md` §3).
+- **Secrets:** provider keys (`OPENAI_API_KEY`, `KIE_API_KEY`, `UPLOAD_POST_API_KEY`, the WordPress application password `WORDPRESS_APP_PASSWORD`, …) are server-only environment variables read through `src/config/env.ts`. Nothing in `src/` reads Supabase Vault. The `api_credentials`/`platform_connections` `*_ref` columns exist in the schema but are unused, and Kinetix holds no social OAuth tokens because accounts are connected on Upload-Post (`modules/social_media.md` §3).
 
 ### D. Inngest (Background Job Engine)
 - **Responsibility:** Managing long-running, error-prone tasks.
@@ -48,15 +49,18 @@ graph TD
 | Content: generate one creative | event | `content/generate-job` |
 | Content: gallery regenerate | event | `content/regenerate-requested` |
 | Content: weekly cycle | cron | `TZ=America/Toronto 0 18 * * 5` (Fri 18:00) |
+| Content: publish a Live social/LinkedIn post | event, one per post, timed for its `scheduled_at` | `content/publish-post` |
+| Content: safety sweep (stale leases, lost events, missing posts, stalled queue) | cron | `*/15 * * * *` |
+| Content: publish a Live blog to WordPress | event, one per Live blog, sent when it finishes generating (or on Retry / going Live) | `content/blog-publish` |
 
-Only the weekly content cycle is a real cron, and it does nothing unless a business has `auto_run_enabled`, which the settings API refuses to set during testing. Everything else is event-triggered on demand, or (the scheduled social post publish) fired once per instance, never a recurring poll. Content-automation publishing (`runPublishBatch`) is **not** registered; see `content_automation.md` §9. The Meta Ads jobs and the Social AI video job (`social/generate-video`) were removed.
+Two content functions are crons: the weekly cycle (acts only for a business with `auto_run_enabled`, which an owner/admin turns on in Automation) and the 15-minute safety sweep (cheap when there's nothing to do). Everything else is event-triggered on demand, or timed: each scheduled social post (manual or automation) gets one event at its publish time instead of a polling loop.
 
 Every event payload carries `business_id` explicitly. Inngest functions run with the Supabase service-role key, which bypasses RLS entirely — scoping for background writes comes from the payload, never inferred from a session (there is no user session inside a background worker).
 
 
 ### The dashboards call their slow third-party APIs live, on every page load — by deliberate choice
 
-The Root/Social dashboards used to read a 5-minute cache table fed by a background job; that job was removed on purpose — always-fresh data was judged more valuable than avoiding the real round trip (Upload-Post ~several seconds).
+The dashboards (now one Dashboard) used to read a 5-minute cache table fed by a background job; that job was removed on purpose — always-fresh data was judged more valuable than avoiding the real round trip (Upload-Post ~several seconds).
 
 The dashboard routes call `UploadPostService.getProfileAnalytics`/`getTotalImpressions` directly, no cache table involved, and degrade to whatever they already have if the live call fails, rather than failing the whole page.
 
@@ -93,17 +97,30 @@ A user's role comes from their membership row (`business_users.role`), not `prof
 
 Every AI-facing feature in Kinetix (content-automation planning, review and blog writing, Social image prompts and captions) works by direct context-window prompting: the relevant business context is assembled into a single prompt and sent to OpenAI in one call. Kinetix does not use Pinecone or any vector store anywhere. The legacy n8n pipeline used a Pinecone-backed RAG step for its competitor-analysis feature; that was deliberately not carried forward when this app was rebuilt, and the feature itself (competitor analysis, plus a related self-ad-analysis job) was later removed from Kinetix entirely as unused — see `database_schema.md` §5. The RAG-vs-single-prompt reasoning still holds for anything AI-facing this app does today: the data volumes involved are small enough (a business's own context, one listing and its photos, one idea prompt) that retrieval isn't needed, and a single well-scoped prompt is simpler to build, debug, and reason about.
 
-## 5. Root Dashboard — cross-module rollup
+## 5. Dashboard — the one overview page
 
-`/dashboard` (`src/modules/dashboard/`) is the app's landing page — `/` itself is a hard redirect to it (`src/app/page.tsx`), it isn't served at `/` directly. Today it is a **Social-only rollup**, backed by one `GET /api/dashboard?range=` handler:
+`/dashboard` (`src/modules/dashboard/`) is the app's landing page (`/` redirects to it). The page and the automation card show their own load errors; they never read as empty data. It is the **only** analytics page: the separate Social Analytics page was merged into it, and `/social` now redirects here. One call, `GET /api/dashboard?range=7d|14d|30d|90d|180d` (default `30d`; labels "7 days", "14 days", "1 month", "3 months", "6 months"), builds two halves that fail independently:
 
-- **Social:** `platform_connections` status, plus Upload-Post profile analytics/impressions called live on every request (see §2's note on dashboards calling their APIs live). A failed call degrades gracefully rather than failing the whole dashboard.
+- **Social analytics, live from Upload-Post** on every load (see §2's note on dashboards calling their APIs live):
+  - connection status;
+  - profile analytics: followers, reach, engagement and its breakdown, the per-platform comparison and Instagram audience;
+  - total impressions for the **exact** range (`start_date`/`end_date`). Upload-Post has no 14-day or 6-month preset, and the old preset mapping left the second week of "14 days" empty.
+- **Content automation, from the database:**
+  - mode, paused and weekly-runs state, and the next Friday 18:00 run;
+  - the latest cycle's generated/target counts;
+  - the next scheduled posts and blogs, and the recently published ones;
+  - a **Needs attention** list: every failure or stuck state that needs a person, errors first, each with the latest underlying error. It covers automation posts and blogs, generation, the weekly run, manual Social posts, accounts, configuration, and this route's own load failures. The full list is in `content_automation.md` §15.
 
-**Total Reach** (Social impressions) is the headline number; followers and engagement are live snapshots.
+The page, top to bottom:
+1. **Needs attention** (only when non-empty);
+2. KPI row: followers, impressions (range), reach, engagement, connected accounts;
+3. impressions trend (range) next to the engagement breakdown;
+4. platforms by followers next to impressions by platform (range);
+5. **Content Automation**;
+6. platform health;
+7. Instagram audience (when there's data).
 
-The page itself: a range switcher (7d/14d/30d/90d/All — `range=all` is a capped 180-day window, not a true earliest-row lookup), a KPI row (total reach, followers, engagement), a reach trend chart, and one Social module card linking to `/social`. Followers and engagement are live snapshots that don't rescope with the selected range; only reach does.
-
-It shows **nothing from content automation** (mode, paused state, cycles, upcoming content, failures). The spec's §18.1 dashboard isn't built.
+Only impressions follow the range. Followers, reach and engagement are what each platform reports now, and the tiles say so. Facebook impressions are overstated over a range (Upload-Post sums Facebook's rolling 30-day daily figure), and the per-platform card notes it.
 
 ## 6. Shared Pagination System
 
@@ -119,7 +136,7 @@ Every list page (Social Posts, Listings, the Content Gallery) uses one shared pa
 
 ## 7. Shared Dashboard UI Kit
 
-`src/components/global/DashboardKit.tsx` is the one file the Root Dashboard and the Social dashboard are built from, so they read as one product instead of separate one-off designs. It exports:
+`src/components/global/DashboardKit.tsx` is the one file the Dashboard is built from (it was shared by the former Root and Social dashboards before they were merged). It exports:
 - A fixed color system (`ACCENT` — purple/blue/green/amber/red, mapped to `DESIGN.md`'s tokens) and `CHART_SERIES`, a categorical color order that's never re-picked per chart (per the dataviz convention: color follows the entity, not its rank).
 - `chartTickInterval(pointCount, targetLabels = 7)` — scales a chart's x-axis label interval to the actual number of data points, so labels never overlap regardless of how long a selected date range is (replacing an earlier fixed-threshold approach that broke down for very long ranges).
 - Layout primitives: `Card`, `SectionTitle`, `KpiTile` (compact/tint/default variants), `EmptyState`.

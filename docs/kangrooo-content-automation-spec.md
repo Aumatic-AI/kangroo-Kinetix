@@ -9,34 +9,32 @@
 
 ---
 
-# 0. Implementation Status (as of November 13, 2026)
+# 0. Implementation Status (as of November 18, 2026)
 
 This section records what the code on `main` actually does. The requirements below are unchanged, except where a section carries a **Status** note recording a product decision that replaced it. How it works is described in [`architecture/content_automation.md`](architecture/content_automation.md).
 
-The system is in its **testing phase**. Content is generated only from the gallery's "Generate now" button, kept in the private gallery, and never published.
+Testing and Live are both built. In **Testing** (the default), content is generated from the gallery's "Generate now" button and never published. An owner/admin switches **Live** mode and the automatic weekly run on in Automation; Live content is then published (phase 5).
 
 | Phase (§20) | State |
 |---|---|
 | 1. Inventory and foundation | **Done.** Property import (`scripts/inventory-import/`), Listings module, Outreach removed (Meta Ads also removed). |
-| 2. Settings and Testing mode | **Done, Testing only.** Two independent frequencies (plus a blog frequency), pause/resume, Testing mode enforced in the database. Live mode is refused by the settings API. |
+| 2. Settings and Testing mode | **Done.** Social image/video, LinkedIn and blog frequencies, pause/resume, Testing/Live mode (owner/admin, confirmed in the UI), Testing enforced in the database. |
 | 3. AI content generation | **Done**, except that video is always one 30 s clip (see §6). Rotation, social and LinkedIn agents, scripts, images, narrated video, validation, revisions and regeneration all work. |
-| 4. Weekly orchestration and scheduling | **Built, switched off.** The weekly cycle (Fri 18:00 America/Toronto) and the whole-week planner exist, but only run with `auto_run_enabled`, which the API refuses to set. Times use the business timezone. |
-| 5. Social media publishing | **Not wired.** A publishing worker with all its safety checks exists (`src/services/content-automation/publish.ts`), but nothing schedules it and nothing creates the post records it would publish. |
+| 4. Weekly orchestration and scheduling | **Done, off by default.** The weekly cycle (Fri 18:00 America/Toronto) plans and generates the following week once an admin turns on automatic weekly runs. Times use the business timezone. |
+| 5. Social media publishing | **Done, Live only.** Each Live social/LinkedIn creative gets one post per platform at its AI-proposed time, published through Upload-Post with re-checks before every call, retries with backoff, uncertain outcomes reconciled or confirmed by a person, and a 15-minute safety sweep (`architecture/content_automation.md` §14). Live blogs are published to WordPress at their AI-chosen times in the week (§13). |
 | 6. Analytics and optimization | **Not started.** `content_performance` exists but nothing writes to it. |
 
 **Not built yet:**
 - Video length chosen by the AI (30 s vs 2 × 20 s): replaced by a product decision, see §6.
-- Live publishing and the scheduling step that creates publishing records.
 - Audience or property timezones.
 - Performance collection, and using it in scheduling.
-- Automation status on the Dashboard (§18.1).
 - Gallery filters for pipeline, environment, scheduled/published, property and date range (§11.2). The API supports most of them; the UI has only content type and generation status.
 - A marker for an incomplete week (§9.3).
 - Video usage count and next planned promotion in Listings (§18.2).
 - Audio-sync and narration-completeness checks on rendered video (§6.4).
 
 **Built beyond or against this spec:**
-- A **blog** pipeline (§22 lists blogs as out of scope): gallery-only in Testing, published to WordPress as soon as it's generated once Live (`architecture/content_automation.md` §13).
+- A **blog** pipeline (§22 lists blogs as out of scope): gallery-only in Testing, published to WordPress at its AI-chosen time in the week once Live (`architecture/content_automation.md` §13).
 - A **permanent delete** for gallery items (`delete_content_item`), which removes a creative and all its revisions. This conflicts with §11.5 / §12.2's "preserve history"; the rotation history (`property_promotions`) is kept.
 - The data model differs from §15 in documented ways: there is no `content_schedule` table (the `social_posts` row is the schedule), and video usage counts are derived rather than stored. See the architecture doc's §8.
 

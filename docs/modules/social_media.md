@@ -79,8 +79,8 @@ These capabilities gate what you can even attempt — e.g. a text-only post only
 
 | Page | Route | What you can do there |
 |---|---|---|
-| Dashboard | `/social` | KPIs (followers, impressions, engagement, reach, connected accounts), an impressions trend chart, engagement breakdown, per-platform comparison and impressions, platform connection health, and (Instagram-only, when enough data exists) audience demographics. This is the module's default/first tab, not a secondary page. |
-| Posts | `/social/posts` | Browse everything generated or uploaded so far, grouped by status, paginated, and start a new post. |
+| *(analytics)* | `/dashboard` | Social analytics live on the main **Dashboard** (see `../architecture/system_design.md` §5). The former Social Analytics page at `/social` was merged into it and now redirects there. |
+| Posts | `/social/posts` | Everything generated or uploaded, paginated, and where a new post starts. Tabs: **All · Drafts · Scheduled · Published · Failed**, each with a count. A tab matches any platform in that state, so a post that went out on two platforms and failed on a third shows under both Published and Failed. Posts still generating or publishing appear under All. The tab is in the URL (`?status=failed`), so it survives a refresh and the Dashboard's "Needs attention" links open the right tab. The former separate **Published** page was this same screen on another tab; `/social/published` now redirects to `?status=published`. |
 | Publish | `/social/posts/publish` | The review wizard for a post already created — pick platforms, preview, then schedule or publish. |
 | Connected Accounts | `/social/connected-accounts` | See which accounts are connected right now and jump to Upload-Post to manage them. |
 
@@ -88,9 +88,11 @@ These capabilities gate what you can even attempt — e.g. a text-only post only
 
 The Posts page is the one place in the whole app that paginates *in-memory* rather than at the database query level — see `../architecture/system_design.md` §6 for exactly why (a `social_posts` row is per-platform, not per-post, so there's no single DB-level "post" to page over). It still fetches a lightweight query and pages the resulting masonry grid at `PAGE_SIZE_DENSE` (20).
 
-### 6.2 Dashboard analytics — called live on every page load, no cache
+### 6.2 Analytics — called live on every page load, no cache
 
-The Dashboard's Upload-Post analytics (followers, impressions, engagement, per-platform breakdown, audience demographics) come from a live call to `UploadPostService.getProfileAnalytics`/`getTotalImpressions` on every request — their analytics API aggregates each connected platform's own data server-side and was measured taking several seconds, accepted deliberately in exchange for never showing stale numbers. This used to go through `upload_post_analytics_cache`, kept warm by a 5-minute `jobs/social-analytics-cache-refresh.job.ts` cron; that job was removed in favor of always-live data — see `../architecture/system_design.md`'s note on Leads/dashboards calling their APIs live. The cache table itself still exists but nothing reads or writes it anymore.
+The Dashboard's Upload-Post analytics (followers, impressions, engagement, per-platform breakdown, audience demographics) come from live calls to `UploadPostService.getProfileAnalytics`/`getTotalImpressions` on every request. Upload-Post aggregates each connected platform's data server-side and was measured taking several seconds. That was accepted deliberately in exchange for never showing stale numbers. This used to go through `upload_post_analytics_cache`, kept warm by a 5-minute cron. That job was removed in favour of always-live data (see `../architecture/system_design.md`). The cache table still exists, but nothing reads or writes it.
+
+The route (`src/app/api/dashboard/route.ts`) builds a **fresh response object on every request** (`emptyResponse()`). The old social dashboard route shallow-copied a module-level `EMPTY` object and `push`ed the per-platform rows into its shared array. A warm Vercel instance kept that array between requests, so every reload added another copy of each connected platform to the Platforms card (fixed in `813a494`).
 
 ## 7. How Publishing Works
 
@@ -116,7 +118,22 @@ Image generation (writing the visual prompt and rendering the image) is entirely
 
 A scheduled post is checked exactly once, right around its scheduled time — not on a recurring timer — so scheduling a post a month out doesn't cost anything until it's actually due. The same one-time check also covers a "publish now" post that Upload-Post itself couldn't resolve instantly (larger videos in particular sometimes finish processing a little after the request returns) — it's the same waiting mechanism either way, just with a different wait time.
 
-### 7.2 Review, in a bit more detail
+### 7.2 Never posted twice
+
+`POST /api/social/posts/publish` **claims each row before calling Upload-Post**: an atomic `draft → publishing` update, and only the request that wins it sends. A double click, a second tab, a retried request or re-selecting a platform that already posted finds the row no longer publishable. It is skipped with "Not sent: this post is already …". The Post Now button is also locked for the whole submit, and platforms that already posted can't be selected again.
+
+- **Scheduled times in the past** are refused before anything is sent.
+- **Failures:**
+  - a definite rejection from Upload-Post (a 4xx) is recorded as **failed**;
+  - no response, a timeout or a server error is recorded as **failed** with "It may have posted. Check the account before retrying", so Retry stays a deliberate choice;
+  - once Upload-Post has accepted a post, a later bookkeeping error (database, Inngest) is only logged. The post never becomes failed or draft, because Retry would resend it.
+- **Cancel Schedule** reverts a post to draft **only after Upload-Post confirms the cancel**. If the cancel fails, or no job id was recorded, the post stays scheduled and you get an error saying it will still be posted.
+- **Deleting a scheduled post** cancels it on Upload-Post first, and deletes nothing if that fails. A post that is still publishing can't be deleted.
+- **The status check** only judges the Upload-Post job it was started for. A check left over from an earlier schedule (cancelled, then rescheduled) ignores the post.
+
+The route tests in `scripts/tests/legacy-social-routes.test.mjs` cover these. They need `--experimental-test-module-mocks`; see CLAUDE.md.
+
+### 7.3 Review, in a bit more detail
 
 The review step is where you see the post as it'll really look — not a generic form, but a mock of each platform's actual feed (its own layout, avatar, and action icons), one tab per selected platform. Captions can be adjusted per platform independently, since the same idea often needs a different tone or length depending on where it's going, and an "Improve with AI" pass is available on any caption without leaving this screen.
 
@@ -166,6 +183,8 @@ Posting the same generated video to Instagram and TikTok is genuinely **two rows
 - A scheduled/publishing post that takes unusually long to resolve on the publishing side has no automatic follow-up after the first check window — it would need a manual look.
 - No way to edit a post that's already scheduled — only cancel it and start over.
 - Retrying an image post always regenerates the media from scratch, even if only the publish step actually failed.
+- A post stuck in **publishing** (e.g. the server died between claiming it and calling Upload-Post, or the status check gave up after 5 minutes) has no button to resolve it in the Posts grid. Check the account, then fix it in the database. That's deliberate for now: it can't be sent twice, but it does need a person.
+- Retrying a failed image post regenerates the image and captions, and Retry can't recover uploaded media (it has no idea prompt).
 
 <details>
 <summary>Key implementation files (for developers going deeper)</summary>

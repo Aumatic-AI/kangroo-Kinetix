@@ -2,12 +2,12 @@
 
 Welcome to the **Kinetix** documentation. Kinetix is a single-tenant Marketing Automation Platform, consolidating several previously-separate n8n + Next.js projects built for one client into one codebase, one Postgres schema, and one background-job runner (Inngest replacing n8n). The schema is multi-tenant-shaped (a `businesses` + `business_users` model) but runs with exactly **one** `businesses` row today — there is one client. A second client later needs new rows, not a new schema (see `architecture/system_design.md` §3).
 
-**Built and active today:** Social Media, Listings (the property inventory), Content Automation (testing phase), plus a cross-module Root Dashboard and a Settings page.
+**Built and active today:** Social Media, Listings (the property inventory), Content Automation (Testing or Live mode), plus the Dashboard and a Settings page.
 
-1. **Root Dashboard** (`/dashboard`) — a Social rollup: total reach, followers and engagement KPIs, a reach trend and a Social module card (all live from Upload-Post). *(active)*
+1. **Dashboard** (`/dashboard`): the one overview page. Social analytics live from Upload-Post (followers, impressions over 7 days–6 months, reach, engagement, per-platform splits, platform health, Instagram audience), the content-automation status (mode, next weekly run, this week's progress, up next, recently published) and a **Needs attention** list. It replaced the separate Social Analytics page. *(active)*
 2. ~~Meta Ads Automation~~ and ~~Outreach~~ — **removed** (the product is posting automation only; see `architecture/database_schema.md` §3–6, §8 and §11).
 3. **Social Media Management** (`/social`) — Multi-platform (TikTok, LinkedIn, YouTube, Facebook, Instagram, X) content generation, scheduling, and publishing. *(active)*
-4. **Content Automation** (`/content` Gallery, `/content/automation` Automation): AI-generated property content (an image or a narrated 30 s video for TikTok·Instagram·Facebook, text + image for LinkedIn, and blog posts) with AI-proposed posting times, reviewed in a gallery. *Testing phase: started manually with "Generate now", never published. Once Live, blogs are published to WordPress (blog.kangrooo.ca) as soon as they're generated; social publishing isn't wired yet.* See `architecture/content_automation.md`. Product requirements: [`kangrooo-content-automation-spec.md`](kangrooo-content-automation-spec.md), with an implementation-status section at the top.
+4. **Content Automation** (`/content` Gallery, `/content/automation` Automation): AI-generated property content (an image or a narrated 30 s video for TikTok·Instagram·Facebook, text + image for LinkedIn, and blog posts) with AI-proposed posting times, reviewed in a gallery. *Testing: started manually with "Generate now", never published. Live (switched on by an admin in Automation): the Friday run generates the next week's content; social/LinkedIn posts go out through Upload-Post and blogs to WordPress (blog.kangrooo.ca), each at its AI-proposed time.* See `architecture/content_automation.md`. Product requirements: [`kangrooo-content-automation-spec.md`](kangrooo-content-automation-spec.md), with an implementation-status section at the top.
 5. **Listings** (`/listings`): the property inventory the content automation rotates through. *(active)*
 6. **Settings** (`/settings`): business identity, brand voice and a usage estimate. One page, no sub-routes. *(active)*
 
@@ -20,6 +20,7 @@ Kinetix is built on a modern serverless stack:
 - **Database & Auth:** Supabase (PostgreSQL, Row Level Security, Supabase Auth)
 - **Background Jobs:** Inngest (event-driven, replacing the legacy projects' n8n workflows)
 - **AI & Media:** OpenAI (planning, review, copy, vision checks), Kie AI (image generation and Seedance 2.5 video with native narration), FFmpeg on the Upload-Post renderer (logo overlay, fade-out, end card, faststart), sharp (logo stamp on generated images)
+- **Blog delivery:** WordPress REST API (blog.kangrooo.ca, application password), Live content-automation blogs only — see `architecture/content_automation.md` §13
 - **Social delivery:** Upload-Post (per-platform publishing to Facebook/Instagram/LinkedIn/X/TikTok/YouTube — Kinetix never does OAuth itself, see `modules/social_media.md` §3)
 
 ## Directory Structure
@@ -27,8 +28,8 @@ To understand the system deeply without scanning source code, refer to the follo
 
 ### 1. Architecture
 - [`architecture/database_schema.md`](architecture/database_schema.md) — Every table and relationship, verified column-by-column against `supabase/migrations/`.
-- [`architecture/content_automation.md`](architecture/content_automation.md) — Kangrooo content automation: the 12 new tables, Testing-vs-Live safeguards, the property rotation algorithm, publishing flow, RLS matrix, the generation pipeline and what's not built. *(migrations applied)*
-- [`architecture/system_design.md`](architecture/system_design.md) — How Next.js, Supabase, and Inngest communicate securely, how the multi-tenant-shaped schema runs single-tenant today, the Root Dashboard, and the shared pagination/dashboard-skeleton systems every module reuses.
+- [`architecture/content_automation.md`](architecture/content_automation.md) — Kangrooo content automation: the 12 new tables (+ `blog_publications`), Testing-vs-Live safeguards, the property rotation algorithm, publishing flow, Live blog publishing to WordPress (§13), RLS matrix, the generation pipeline and what's not built. *(migrations applied)*
+- [`architecture/system_design.md`](architecture/system_design.md) — How Next.js, Supabase, and Inngest communicate securely, how the multi-tenant-shaped schema runs single-tenant today, the Dashboard, and the shared pagination/dashboard-skeleton systems every module reuses.
 
 ### 2. Core Modules
 - [`modules/listings.md`](modules/listings.md) — The property inventory (`/listings`): searchable table, image/detail drawer, rotation status and activate/deactivate.

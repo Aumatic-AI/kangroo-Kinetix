@@ -1,8 +1,8 @@
 # Content Automation — Data Model & Safeguards
 
-> **Status: all content-automation migrations are applied to the linked project** (`20261031000000_content_automation_schema.sql` plus `20261102000000` manual trigger, `20261103000000` week plan, `20261106000000` blog pipeline, `20261107000000` gallery delete, `20261112134926` exact-count trigger, `20261114000000` image/video split, `20261118000000` blog → WordPress publishing).
+> **Status: all content-automation migrations are applied to the linked project** (`20261031000000_content_automation_schema.sql` plus `20261102000000` manual trigger, `20261103000000` week plan, `20261106000000` blog pipeline, `20261107000000` gallery delete, `20261112134926` exact-count trigger, `20261114000000` image/video split, `20261118000000` blog → WordPress publishing, `20261118120000` Live social publishing).
 > Source: `supabase/migrations/20261031000000_content_automation_schema.sql` and the later migrations above. Product requirements: [`../kangrooo-content-automation-spec.md`](../kangrooo-content-automation-spec.md). Where this file and the spec disagree, this file reflects the migration (the spec's §15 table list was superseded — see "Deviations from the spec").
-> What exists today: the **database layer, the publishing worker service (not scheduled), the guarded API routes, and — for the testing phase — the generation worker, the gallery and the Automation page** (see §10). Social publishing is **not wired**. **Blog publishing to WordPress is wired for Live content only** (§13); in Testing every content type stays in the gallery.
+> What exists today: the database layer, the generation worker, the gallery, the Automation page, and **Live publishing**: social/LinkedIn posts through Upload-Post at their AI-proposed times (§14), blogs to WordPress (§13). An owner/admin switches Live mode and the automatic weekly runs on in Automation. In Testing every content type stays in the gallery and nothing is published.
 
 ## 1. The 12 new tables
 
@@ -146,18 +146,18 @@ Scheduling lives in the **database**, not on Upload-Post. The worker (`src/servi
 `content_schedule` is **not** a table (the post *is* the schedule); `last_used_for_video`/`video_use_count`/`rotation_position` are **derived** (view / identity), not columns; `content_performance` hangs off `social_posts`; added `property_images`, `property_legacy_content`, `property_promotions`, `content_clips`; `automation_mode` on cycles became `environment`.
 
 ## 9. Not built yet
-- The scheduling step that creates Live `social_posts` from a proposed schedule, and the Inngest functions that tick `runPublishBatch` / `reconcileUnknownPosts` (the worker in `publish.ts` exists and is tested, but nothing calls it).
-- Live mode and automatic weekly runs. Both are refused by the settings API during testing, and the Automation page shows them as locked.
+- Pausing or leaving Live stops an in-flight generation job permanently (`keepAlive`), including any video already paid for.
 - Analytics collection: nothing writes `content_performance`, and nothing feeds performance back into scheduling or content.
 - Audio-sync and narration-completeness checks on rendered video. Duration, codecs, audio track and size are measured from the real file (`media-probe.ts`), but by product decision nothing inspects a rendered video's content (§10).
 - Audience or property timezones: every slot uses `generation_timezone`.
-- Automation status on the root Dashboard (mode, paused, current cycle, upcoming content, failures). It shows only Upload-Post reach.
 - Gallery filters for pipeline, environment, scheduled/published, property and date range. `GET /api/content/gallery` already accepts `pipeline`, `environment`, `property` and a `from`/`to` date range, but the UI only offers content type and generation status.
 - A marker for an incomplete week (a cycle with failed slots).
 
 ## 10. Testing-phase generation (gallery only)
 
-**Trigger:** the gallery's temporary "Generate now" → `POST /api/content/trigger` → `trigger_manual_content_cycle()` (editor+, automation enabled, **Testing mode only**) adds **exactly** the requested jobs (0–3 each of social image / social video / LinkedIn / blog; the dialog has one switch per type) to the *upcoming* Monday-start week's Testing cycle. New jobs take the slots after the highest existing `slot_index`, and the target is raised to at least that slot. Empty slots are never refilled: before migration `20261112134926` it called `ensure_cycle_slots`, so a slot whose job row had gone missing was silently re-queued, and one click started two jobs. The weekly cycle still uses `ensure_cycle_slots`, which gives each social slot its type from `social_video_target_count`, spreading the videos evenly through the week (slot *g* of *T* is a video when ⌊g·V/T⌋ steps up; e.g. 2 images + 1 video → image, image, video). → `content/process-queue` → `claim_generation_jobs` → one `content/generate-job` per slot. `weeklyContentCycle` (cron Fri 18:00 America/Toronto) exists but only acts when `auto_run_enabled` is true; the settings API refuses to enable it.
+**Trigger:** the gallery's "Generate now" → `POST /api/content/trigger` → `trigger_manual_content_cycle()` (automation enabled) adds **exactly** the requested jobs (0–3 each of social image / social video / LinkedIn / blog; the dialog has one switch per type).
+- **Testing** (editor+): into the *upcoming* Monday-start week's Testing cycle; never published.
+- **Live** (owners/admins, `20261119120000`): into the *current* week's Live cycle. It appends after the Friday run's slots, or creates the cycle if there is none. Each creative is scheduled in the 7 days from today, never in the past (`schedulingWindow`: today's earlier hours and the week's past days are excluded), and published like any Live content. It uses the current week, never the next, because the Friday run skips an existing cycle and would then not apply the weekly frequencies. New jobs take the slots after the highest existing `slot_index`, and the target is raised to at least that slot. Empty slots are never refilled: before migration `20261112134926` it called `ensure_cycle_slots`, so a slot whose job row had gone missing was silently re-queued, and one click started two jobs. The weekly cycle still uses `ensure_cycle_slots`, which gives each social slot its type from `social_video_target_count`, spreading the videos evenly through the week (slot *g* of *T* is a video when ⌊g·V/T⌋ steps up; e.g. 2 images + 1 video → image, image, video). → `content/process-queue` → `claim_generation_jobs` → one `content/generate-job` per slot. `weeklyContentCycle` (cron Fri 18:00 America/Toronto) exists but only acts when `auto_run_enabled` is true; the settings API refuses to enable it.
 
 **Per job** (`src/services/inngest/content/generate-creative.ts`, shared with gallery regeneration): load property + reference images → AI agent plans the creative (social: **image or video as the user chose** — the job's `content_type` is passed as `forceType`, the prompt states the format is fixed and a plan of the other type is rejected; for video always one 30 s clip; LinkedIn: text + image only) → AI proposes a posting time per platform, enforced by `validateProposedSchedule` (inside the week, 08:00–21:30 local, ≥20 h between posts on the same platform, stored UTC + IANA timezone in `content_revisions.proposed_schedule`) → media (Kie nano-banana-2 image, or one Seedance 2.5 clip) → `validateRevisionContent` (incl. a backstop that rejects invented prices/capacity/size/superlatives) → revision `valid` → `property_content.current_revision_id`, status `completed`. No step creates a `social_posts` row or calls Upload-Post.
 
@@ -206,13 +206,13 @@ The gallery drawer shows the chosen voice under "Creative strategy".
 
 **Per-platform copy** (`platform-copy.ts`): the AI's base caption / per-platform caption + hashtags are fitted to each platform's budget (Instagram 2,200 chars / 30 tags; TikTok 2,200 / 6; Facebook 5,000 / 5 — tag caps for Facebook/TikTok are house rules), dropping hashtags before cutting text. Every platform's final text is checked for invented claims (the per-platform captions previously weren't). Stored on `content_revisions.content_decision.platformPosts`, with the media report under `.media`, and shown in the gallery — this is the exact payload a future publisher reads.
 
-**Weekly planning (automation path).** When `weeklyContentCycle` runs (only with `auto_run_enabled`), it creates the cycle from the saved frequencies (social target = images + videos, `social_video_target_count` = videos) and `planCycleWeek` (`plan-week.ts`) decides the posting days/times for **all** posts of each pipeline in one AI call, saved on `content_generation_cycles.week_plan` (migration `20261103000000`) before any job starts. `validateWeekPlan` enforces it across the whole plan — in-week, 08:00–21:30, ≥20 h between posts on the same platform — and replaces anything the AI omits or botches with deterministic defaults that put posts on different days (tested for frequencies 3, 5 and 7). Each job then takes the slot at its `(pipeline, slot_index)` instead of choosing its own, which matters because jobs run in parallel and cannot see each other's choices. It is idempotent (only unplanned posts are planned; an existing slot never moves) and a planner failure never blocks generation — jobs fall back to per-creative scheduling. **The manual trigger does not plan** (it adds slots one click at a time), so its jobs use the per-creative path, and concurrent manual jobs can still propose overlapping times. A regeneration keeps the creative's existing slot. Each slot records `source`: `week_plan` or `per_creative`. Limitation: the plan is made before properties are assigned, so it uses the business timezone and spreads posts rather than tailoring times to a venue.
+**Weekly planning (automation path).** When `weeklyContentCycle` runs (only with `auto_run_enabled`), it creates the cycle from the saved frequencies (social target = images + videos, `social_video_target_count` = videos) and `planCycleWeek` (`plan-week.ts`) decides the posting days/times for **all** posts of each pipeline (social, LinkedIn, and blog publish times) in one AI call per pipeline, saved on `content_generation_cycles.week_plan` (migration `20261103000000`) before any job starts. `validateWeekPlan` enforces it across the whole plan — in-week, 08:00–21:30, ≥20 h between posts on the same platform — and replaces anything the AI omits or botches with deterministic defaults that put posts on different days (tested for frequencies 3, 5 and 7). Each job then takes the slot at its `(pipeline, slot_index)` instead of choosing its own, which matters because jobs run in parallel and cannot see each other's choices. It is idempotent (only unplanned posts are planned; an existing slot never moves) and a planner failure never blocks generation — jobs fall back to per-creative scheduling. **The manual trigger does not plan** (it adds slots one click at a time), so its jobs use the per-creative path, and concurrent manual jobs can still propose overlapping times. A regeneration keeps the creative's existing slot. Each slot records `source`: `week_plan` or `per_creative`. Limitation: the plan is made before properties are assigned, so it uses the business timezone and spreads posts rather than tailoring times to a venue.
 
 **Proposed times** are the AI's reasoning, not guarantees. Property timezone isn't in the imported data, so scheduling uses `content_automation_settings.generation_timezone` (default America/Toronto) as the fallback the spec allows.
 
 ## 11. Blog pipeline
 
-A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`. For one listing the AI writes a detailed, informational article from the listing's own data and generates its images from the listing photos. It never gets a `social_posts` row, a platform, a schedule or a posting time (`20261106000000_content_blog_pipeline.sql`). In **Testing** it stays in the gallery; a **Live** blog is published to WordPress as soon as it is generated (§13).
+A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`. For one listing the AI writes a detailed, informational article from the listing's own data and generates its images from the listing photos. It never gets a `social_posts` row (`20261106000000_content_blog_pipeline.sql`). Like a social post it gets a **publish time**: `proposed_schedule` with one slot, platform `blog`, from the week plan or, failing that, an AI proposal for that blog alone (`schedule-slots.ts`, shared with social/LinkedIn; blog guidance: weekday mornings to early afternoon). In **Testing** it stays in the gallery; a **Live** blog is published to WordPress at that time (§13).
 
 **Schema (additive).** `blog` is allowed in the pipeline / content-type CHECKs of the queue, promotions and `property_content`; `content_automation_settings.blog_frequency_per_week` and `content_generation_cycles.blog_target_count` (0–14); `ensure_cycle_slots` creates blog slots; `trigger_manual_content_cycle(p_social, p_linkedin, p_blog)` gains `p_blog` (default 0; same Testing-only / editor+ rules); `content_revisions_guard` requires a title and body before a blog revision can be validated. No blog-specific columns — the post is stored as: `script` = title, `caption` = full Markdown (images inlined), `hashtags` = tags, `format_reason`, `media_asset_id` = hero image, `content_decision.blog` = the structured post (blocks, images, angle, format, word count, what the AI saw in the photos).
 
@@ -277,7 +277,7 @@ Migration `20261118000000_blog_wordpress_publishing.sql`; worker `src/services/i
 
 **Testing never publishes.** `blog_publications.environment` must be `live` (CHECK) and the insert guard rejects Testing content, non-blog content, and anything but the current valid revision.
 
-**When.** A blog is published as soon as it is generated; there is no schedule. A trigger on `property_content` creates the row the moment a Live blog is `completed` with a current revision. After the job completes, `kickBlogPublication` sends `content/blog-publish`; a Live regeneration does the same.
+**When.** At the blog's AI-chosen publish time (§11). A trigger on `property_content` creates the row the moment a Live blog is `completed` with a current revision. Its `scheduled_at`/`next_attempt_at` are set to the revision's `blog` slot, or now if that has passed or is missing (`20261118120000`). After the job completes, `kickBlogPublication` sends `content/blog-publish` timed for that moment; a Live regeneration does the same. An early event finds the row `not_due` and re-sends itself for the right time. There is no lateness cut-off for blogs: one held while paused is published when released, at its time or right away if that has passed.
 
 **States.**
 ```
@@ -309,5 +309,64 @@ The gallery's Retry button (`POST /api/content/wordpress/retry` → `retry_blog_
 
 **Integrity.** A Live blog with a publication row can't be regenerated (`request_content_regeneration`). While its row is pending, held, publishing or published it can't switch revision. It can't be deleted from the gallery, because the RESTRICT foreign key blocks that. Nothing ever updates or deletes the WordPress post afterwards.
 
-**Still locked.** The settings API still refuses Live mode and automatic weekly runs. Going Live means lifting that lock, which also starts Live social generation. Social publishing (§9) is still not wired.
+**Going Live.** An owner/admin switches Live mode on in Automation (with a confirmation). Blog publications created while paused or in Testing are held and released then; the settings API sends their events. The 15-minute sweep (§14) re-sends any due or stuck publication whose event was lost.
+
+## 14. Live social publishing (TikTok, Instagram, Facebook, LinkedIn)
+
+Code: `src/services/inngest/content/publish-social.ts` (Inngest functions and I/O), `src/services/content-automation/schedule-posts.ts` (pure planner, tested in `scripts/tests/content-schedule-posts.test.mjs`), the existing worker `publish.ts` (§5), and migration `20261118120000_live_social_publishing.sql`.
+
+**1. Scheduling.** When a **Live** social or LinkedIn creative completes (generate job or regeneration), `kickSocialPublishing` calls `scheduleCreativePosts`. That creates one `social_posts` row per platform (TikTok/Instagram/Facebook, or LinkedIn) via `planAutomationPosts`:
+- **Time:** the AI-proposed time (`content_revisions.proposed_schedule`), stored UTC with its timezone.
+- **Copy:** that platform's fitted text and hashtags (`content_decision.platformPosts`).
+- **Format:** video / image / text_image.
+- **Account:** the platform's Upload-Post connection. A connected one is preferred; a disconnected one still gets a row. The claim never picks up a post whose account isn't connected, so it waits. The Dashboard lists it as blocked. If the account is reconnected within 6 hours of the post's time it publishes; otherwise `claim_publish_jobs` skips it with the reason (`20261119000000`: "missed the 6 hours publishing window: no connected account…"). It never becomes `failed`, so Retry doesn't apply.
+- **Status:** `scheduled`, or `held` while automation is paused or not Live.
+
+It is idempotent: one row per creative × platform, and a concurrent duplicate insert is ignored. A proposed time already past (≤ 24 h) is moved to 15 minutes from now; older than that, the platform isn't scheduled. With no connection or no proposed time, it isn't scheduled either. The gallery shows the reason. The DB guard (`social_posts_automation_guard`) re-enforces Live-only, current valid revision, platform ↔ pipeline ↔ format and connection ownership.
+
+**2. Publishing.** For each scheduled row a `content/publish-post` event is sent, timed for `scheduled_at`. `publishSocialPost` (concurrency 2) then:
+1. claims exactly that post with `claim_publish_jobs(p_post_id)`. This succeeds only when the post is due, not in backoff, and `publish_block_reason` passes, so a duplicate or early event does nothing;
+2. runs `publishClaimedPost` (§5): re-checks, Upload-Post connection check, the call, ids saved before interpretation, unknown never retried;
+3. on a retryable failure, sends the event again for `next_attempt_at`.
+
+Facebook and LinkedIn posts with no page id in the connection's metadata are failed before the call, never sent. Upload-Post would otherwise post LinkedIn to the personal profile of whoever connected the account. Sync Connected Accounts, then Retry.
+
+**3. Safety net.** `contentAutomationSweep` (cron every 15 min):
+1. `recover_stale_publishing` marks dead publish leases as unknown;
+2. `reconcileUnknownPosts` resolves unknowns by their saved Upload-Post id;
+3. Live creatives of the last 8 days that are missing posts get them scheduled;
+4. due posts whose event was lost are published;
+5. due or stuck blog publications are re-sent (§13);
+6. a stalled generation queue is restarted (only while automation is enabled somewhere).
+
+**4. Human actions (gallery drawer, "Publishing").** Each platform row shows its time, status, error, and a link once published.
+- **Retry** on a failed post: `POST /api/content/posts/retry-publish` → `retry_failed_publish`, then the publish event.
+- **"It's live" / "It didn't post"** on an unknown-outcome post: `POST /api/content/posts/resolve` → `confirm_unknown_publish` (editor wrapper around `resolve_unknown_publish`).
+
+**5. Related changes.**
+- `finish_publish` clears `publish_outcome_unknown` on a definite outcome.
+- Generation claims only as many jobs as can run at once (`GENERATION_CONCURRENCY` = 3), so leases no longer expire while jobs wait.
+- Same-platform spacing is 20 h up to 7 posts a week and 5 h above that (`minSamePlatformGapMs`), with a second default time of day per platform, so 8–14 posts a week no longer collide.
+
+**Timing.** The weekly run (Fri 18:00 Toronto) generates and plans the following Monday–Sunday week, so posts go out through that week at their planned times.
+
+## 15. Nothing fails silently
+
+Every failure or stuck state that needs a person is listed under **Needs attention** on the Dashboard (`src/modules/dashboard/lib/attention.ts`, a pure function tested in `scripts/tests/dashboard-attention.test.mjs`; the facts are gathered in `src/app/api/dashboard/route.ts`). Errors come first, each with the latest underlying error verbatim and a link to where it's fixed.
+
+| Shown | When |
+|---|---|
+| The Dashboard's own load failures | Upload-Post analytics or impressions failed, a platform missing from Upload-Post's answer, the automation status or the problem checks couldn't be read |
+| Configuration (Live only) | `UPLOAD_POST_PROFILE` missing; WordPress env missing while blogs are on |
+| Accounts (Live only) | automation paused; TikTok/Instagram/Facebook/LinkedIn not connected; Facebook/LinkedIn with no page |
+| Automation posts | blocked by a disconnected account (before they age out); more than 30 min past their time with nothing blocking them ("publisher may not be running"); failed; unconfirmed; skipped in the last 7 days (with the reason, from `20261119000000`); Live creatives with a platform that got no post |
+| Blogs | failed; more than 30 min past their publish time; skipped in the last 7 days |
+| Generation | jobs stalled for over an hour; a weekly run that should have created next week's cycle and didn't; creatives that failed in the last 7 days |
+| Manual Social posts | publishing for over 15 minutes with no result; scheduled but unconfirmed 15 min after their time; failed |
+
+**Code paths that used to fail silently, now fixed:**
+- `publishSocialPost` checks the Upload-Post configuration *before* claiming. A post it can't send stays scheduled instead of being wrongly flagged "may have posted".
+- An early or not-yet-due publish event now re-sends itself for the due time, instead of waiting for the sweep.
+- The manual scheduled-post check writes an explanation onto the post when it gives up after 5 minutes.
+- Cancel Schedule reports a cancel that succeeded on Upload-Post but failed to save here as exactly that, instead of "Not cancelled".
 

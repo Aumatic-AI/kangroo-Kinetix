@@ -6,11 +6,11 @@ What's in the app today:
 
 | Module | Route | What it does |
 |---|---|---|
-| Dashboard | `/dashboard` | Social reach, followers and engagement rolled up live from Upload-Post |
-| Content Gallery | `/content` | AI-generated property content (images, 30 s narrated videos, LinkedIn posts, blog posts) to review. **Testing phase:** generation is manual ("Generate now") and nothing is published. Once Live, blogs are published to WordPress automatically |
-| Automation | `/content/automation` | Weekly frequency per content type, pause/resume, Testing mode |
+| Dashboard | `/dashboard` | The one overview: social analytics live from Upload-Post (7 days to 6 months), content-automation status (up next, recently published) and a "Needs attention" list |
+| Content Gallery | `/content` | AI-generated property content (images, 30 s narrated videos, LinkedIn posts, blog posts) to review. In **Testing** nothing is published. "Generate now" works in both modes; in Live it publishes at AI-chosen times in the next 7 days. In **Live**, social and LinkedIn posts go out through Upload-Post and blogs to WordPress, each at its AI-chosen time; each item shows what happened per platform |
+| Automation | `/content/automation` | Weekly frequency per content type, pause/resume, Testing/Live mode, automatic weekly runs (Fri 18:00 Toronto) |
 | Listings | `/listings` | The property inventory that content automation rotates through |
-| Social | `/social/posts`, `/social/published`, `/social`, `/social/connected-accounts` | Generate an AI image or upload media, preview it per platform, then publish now or schedule it through Upload-Post |
+| Social | `/social/posts`, `/social/connected-accounts` | Generate an AI image or upload media, preview it per platform, then publish now or schedule it through Upload-Post |
 | Settings | `/settings` | Business identity, brand voice, and a usage/cost estimate |
 
 The Meta Ads and Outreach modules have been removed.

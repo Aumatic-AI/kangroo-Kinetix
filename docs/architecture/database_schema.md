@@ -1,6 +1,6 @@
 # Kinetix — Database Architecture & Data Flows
 
-This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the **core** (§1–§7: users/businesses, media, platform connections, Social Media) and the **12 content-automation tables** (properties, rotation, generation queue, content, revisions, clips, publishing logs, performance), which are documented in full in [`content_automation.md`](content_automation.md) rather than repeated here. The Meta Ads (§3–6) and Outreach (§8) tables have been dropped.
+This describes the schema exactly as it exists live today — migrated and verified column-by-column against `supabase/migrations/`. It is not an idealized target; every column below is what's actually in the database right now. Two groups of tables exist: the **core** (§1–§7: users/businesses, media, platform connections, Social Media) the **12 content-automation tables** (properties, rotation, generation queue, content, revisions, clips, publishing logs, performance) plus `blog_publications` (Live blogs → WordPress), which are documented in full in [`content_automation.md`](content_automation.md) rather than repeated here. The Meta Ads (§3–6) and Outreach (§8) tables have been dropped.
 
 **Multi-tenant-shaped, single-tenant in practice:** the tenant entity is `businesses`, with a `business_users` membership table, but the deployment runs with exactly **one** `businesses` row. See `system_design.md` §3 for the auto-enroll trigger that makes this cost nothing operationally.
 
@@ -237,6 +237,9 @@ Inngest jobs write with the service-role key, which bypasses RLS entirely — ex
     - `20261112134926_content_trigger_exact_jobs.sql`: "Generate now" creates exactly the requested jobs.
     - `20261114000000_social_image_video_split.sql`: the user chooses image vs video for social. `content_automation_settings.social_image_frequency_per_week` / `social_video_frequency_per_week` (together ≤ 14; `social_frequency_per_week` becomes their generated total), `content_generation_cycles.social_video_target_count`, `ensure_cycle_slots` sets each social slot's `content_type`, and `trigger_manual_content_cycle(p_social_image, p_social_video, p_linkedin, p_blog)` replaces the 3-argument version.
     - `20261118000000_blog_wordpress_publishing.sql`: `blog_publications` (one row per **Live** blog: WordPress post id/URL, uploaded media, publish state), its guard/claim/finish/retry functions, and the hold/release, regenerate and revision-switch rules extended to it.
+    - `20261118120000_live_social_publishing.sql`: `finish_publish` clears `publish_outcome_unknown` on a definite outcome; `confirm_unknown_publish` lets an editor resolve an unknown-outcome post from the gallery; `blog_publications.scheduled_at` (a Live blog waits for its AI-chosen publish time).
+    - `20261119000000_publish_skip_reasons.sql`: a Live post skipped for missing its 6-hour window now records why (e.g. no connected account, listing deactivated, or the publisher didn't run).
+    - `20261119120000_live_generate_now.sql`: `trigger_manual_content_cycle` also works in Live mode (owners/admins only), adding to the current week's Live cycle.
 
 ## 12. Worked Examples
 
