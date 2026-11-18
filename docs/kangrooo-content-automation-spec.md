@@ -36,7 +36,7 @@ The system is in its **testing phase**. Content is generated only from the galle
 - Audio-sync and narration-completeness checks on rendered video (§6.4).
 
 **Built beyond or against this spec:**
-- A display-only **blog** pipeline (§22 lists blogs as out of scope).
+- A **blog** pipeline (§22 lists blogs as out of scope): gallery-only in Testing, published to WordPress as soon as it's generated once Live (`architecture/content_automation.md` §13).
 - A **permanent delete** for gallery items (`delete_content_item`), which removes a creative and all its revisions. This conflicts with §11.5 / §12.2's "preserve history"; the rotation history (`property_promotions`) is kept.
 - The data model differs from §15 in documented ways: there is no `content_schedule` table (the `social_posts` row is the schedule), and video usage counts are derived rather than stored. See the architecture doc's §8.
 
@@ -1333,7 +1333,7 @@ The following are not part of the initial scope unless explicitly added later:
 
 The historical blog fields in the supplied inventory can be retained for data compatibility, but blog automation is not part of the currently defined social content pipelines.
 
-> **Status:** a display-only blog pipeline was added anyway. It generates articles with images into the gallery, has its own weekly frequency and rotation, and never publishes. Posts leave the gallery only via "Copy Markdown". See `architecture/content_automation.md` §11.
+> **Status:** a blog pipeline was added anyway; in Live mode it publishes to WordPress (`architecture/content_automation.md` §13). The rest of this note describes the testing phase. It generates articles with images into the gallery, has its own weekly frequency and rotation, and never publishes. Posts leave the gallery only via "Copy Markdown". See `architecture/content_automation.md` §11.
 
 # 23. Open Technical Decisions
 

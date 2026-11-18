@@ -7,13 +7,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev              # Start dev server (Next.js 16, App Router)
+npm run dev              # Start dev server (Next.js 16, App Router, `next dev --webpack`)
 npm run build             # Production build
-npm run lint               # ESLint
-npx tsc --noEmit          # Typecheck (no dedicated npm script — run this directly after any change)
+npm run lint               # ESLint — currently reports ~80 pre-existing errors (mostly no-explicit-any); don't add new ones
+npx tsc --noEmit          # Typecheck (no dedicated npm script — run this directly after any change; currently clean)
+node --test scripts/tests/*.test.mjs   # Unit tests (node:test, pure logic, no network/DB)
 ```
 
-No test suite exists in this repo yet — don't assume `npm test` works.
+There is no `npm test` script. The tests in `scripts/tests/` import the real `src/**/*.ts` files through `alias-hooks.mjs` (resolves `@/…`, strips types), so they need Node 22+. `legacy-social-routes.test.mjs` uses module mocks and fails under the plain command above — run it as `node --experimental-test-module-mocks --import ./scripts/tests/alias-register.mjs --test scripts/tests/legacy-social-routes.test.mjs`. When you change logic in `src/services/content-automation/`, `src/modules/listings/lib/`, or `src/config/nav-active.ts`, run the matching test file.
+
+### Scripts
+
+- `scripts/create-admin-user.mjs` — creates/resets the single login (see Auth below).
+- `scripts/check-wordpress.mjs` — read-only check that the WordPress credentials sign in and can publish/upload.
+- `scripts/inventory-import/` — `normalize.py` turns `docs/content.xlsx` into normalized JSON (report: `docs/inventory-import-report.md`), `check_images.py` checks image URLs, `apply.mjs` upserts into `properties`/`property_images`. `apply.mjs` is a dry run unless given `--apply --business-id <uuid> --expect-project-ref <ref>`.
+
+### Environment variables
+
+Every env var is declared and validated (zod) in `src/config/env.ts` and read via `env` from `@/config` — add a new variable there and to `.env.example`, not as a bare `process.env` read. The set in use: Supabase (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), `OPENAI_API_KEY`, `KIE_API_KEY`, `UPLOAD_POST_API_KEY`, `UPLOAD_POST_PROFILE`, `STORAGE_PROVIDER`, `WORDPRESS_URL`/`WORDPRESS_USERNAME`/`WORDPRESS_APP_PASSWORD` (+ optional `WORDPRESS_CATEGORY_ID`), `INNGEST_EVENT_KEY` (+ `INNGEST_SIGNING_KEY`/`INNGEST_DEV`, read by the Inngest SDK), `LOG_LEVEL`, `NEXT_PUBLIC_APP_URL`.
 
 ### Supabase (migrations)
 
@@ -28,9 +39,15 @@ Never redirect stderr into the types file (`... > src/types/supabase.ts 2>&1`) �
 
 Inngest dev server runs at `http://localhost:8288` (`INNGEST_DEV=1` in `.env.local` — must be unset/`0` in production, or every background job tries to reach a local server that doesn't exist). A new Inngest function must be added to the `functions` array in `src/services/inngest/functions.ts` or it never registers, even if `createFunction(...)` exists elsewhere. All cron scheduling is Inngest-side (declared on each `src/jobs/*.job.ts` function itself, triggered by Inngest's own scheduler hitting `/api/inngest`) — there is no `vercel.json` `crons` entry or `/api/cron` route; don't add one, an earlier no-op stub of both tripped Vercel Hobby-plan's daily-cron-jobs limit on deploy.
 
-`src/jobs/*.job.ts`, registered in `src/services/inngest/functions.ts` — the only background jobs in the app:
-- `social-scheduled-post-check.job.ts` — event-triggered once per scheduled post, not a recurring poll.
-- `src/services/inngest/content/` — content automation (testing phase): `content/process-queue` (claims queue jobs), `content/generate-job` (one creative end to end), `content/regenerate-requested` (gallery regenerate), and `weeklyContentCycle` (cron Fri 18:00 America/Toronto; when enabled it also plans the whole week's posting days/times up front via `planCycleWeek`). **The cron is inert: it only acts for a business whose `content_automation_settings.auto_run_enabled` is true, and the settings API refuses to set that during testing.** Generation starts only from the gallery's manual "Generate now" (`POST /api/content/trigger`). The `blog` pipeline (`generate-blog.ts`: AI looks at the listing photos, decides the post's format/angle/structure/images each run, writes it, generates images from the listing photos) is display-only like the rest. None of these ever publishes — output goes to the gallery tables only; there is no code path from generation to `social_posts`/Upload-Post yet. Don't wire one in without being asked.
+The registered functions in `src/services/inngest/functions.ts` are the only background jobs in the app:
+- `socialScheduledPostCheck` (`src/jobs/social-scheduled-post-check.job.ts`, event `social/scheduled-post-created`) — fired once per scheduled Social post, not a recurring poll.
+- `generateSocialImage` (`src/services/inngest/social/generate-social-image.ts`, event `social/generate-image`) — the Social module's AI image generation.
+- `publishBlogToWordPress` (`src/services/inngest/content/publish-blog.ts`, event `content/blog-publish`) — publishes one **Live** blog to WordPress (see below).
+- `src/services/inngest/content/` — content automation (testing phase): `content/process-queue` (claims queue jobs), `content/generate-job` (one creative end to end), `content/regenerate-requested` (gallery regenerate), and `weeklyContentCycle` (cron Fri 18:00 America/Toronto; when enabled it also plans the whole week's posting days/times up front via `planCycleWeek`). **The cron is inert: it only acts for a business whose `content_automation_settings.auto_run_enabled` is true, and `PATCH /api/content/settings` refuses to set that — and refuses `mode: "live"` — during testing.**
+
+Generation starts only from the manual "Generate now" (`POST /api/content/trigger`), which takes a count of 0–3 each for `socialImage`, `socialVideo`, `linkedin` and `blog` (the user picks image vs video; one social creative is shared by TikTok/Instagram/Facebook). Weekly frequencies are separate per type (`social_image_…`/`social_video_…`/`linkedin_…`/`blog_frequency_per_week`, 0–14 each, social image + video together ≤ 14). The `blog` pipeline is `generate-blog.ts`: the AI looks at the listing photos, decides the post's format/angle/structure/images each run, writes it, and generates images from the listing photos.
+
+**Testing content never leaves the gallery.** The one live publishing path is **blogs → WordPress, Live only** (`docs/architecture/content_automation.md` §13): a DB trigger gives every completed Live blog a `blog_publications` row (CHECK `environment = 'live'`), `kickBlogPublication` sends `content/blog-publish`, and the worker uploads the images and creates a published post via `src/services/wordpress/` (application password in `WORDPRESS_URL`/`WORDPRESS_USERNAME`/`WORDPRESS_APP_PASSWORD`; check with `node --env-file=.env.local scripts/check-wordpress.mjs`). Social publishing is still not wired: a Live-only worker exists as library code (`src/services/content-automation/publish.ts`, DB-scheduled via `claim_publish_jobs`, unit-tested) and `POST /api/content/posts/retry-publish` only re-queues via an RPC, but **no Inngest function runs it and nothing creates automation `social_posts` rows**. Don't wire it in without being asked.
 
 **Video generation exists only in content automation** (every video is ONE 30 s Seedance 2.5 clip, 9:16 480p with native narration — `src/services/content-automation/video-spec.ts`; the FFmpeg renderer only brands it: logo overlay, 0.5 s fade to black and a 1 s Kangrooo end card, ≈31 s final — never joins clips). The old Social AI video pipeline (script → ElevenLabs narration → per-scene images → Seedance 1.5 clips → stitch), ElevenLabs, and the Settings video-reference photos were removed — don't reintroduce them without being asked. Social still generates *images* and publishes uploaded video.
 
@@ -62,7 +79,7 @@ Kinetix is a single-tenant marketing-automation platform for one client (Kangroo
 
 ### Single-tenant assumption
 
-Page routes are gated by Supabase Auth in `src/proxy.ts` (Next 16's middleware: no session → `/login`), but `/api/*` routes are **not** gated, and almost every API route/service resolves "the business" via `supabase.from("businesses").limit(1).single()` rather than deriving `business_id` from a session. This is intentional for the current one-client scope, not a bug to "fix" by adding multi-tenant plumbing unless explicitly asked.
+Page routes are gated by Supabase Auth in `src/proxy.ts` (Next 16's middleware: no session → `/login`), but `/api/*` routes are **not** gated, and almost every API route/service resolves "the business" via `supabase.from("businesses").limit(1).single()` (or the `getFirstBusinessId()` helper in `src/lib/business.ts` — prefer it in new code) rather than deriving `business_id` from a session. This is intentional for the current one-client scope, not a bug to "fix" by adding multi-tenant plumbing unless explicitly asked.
 
 ### Auth
 
@@ -73,6 +90,12 @@ Supabase email/password sign-in only (`src/modules/auth`). **There is no public 
 - **API routes**: `createClient()` from `@/lib/supabase/server` (async, cookie/RLS-scoped).
 - **Client components/hooks**: `createClient()` from `@/lib/supabase/client` (sync, browser).
 - **Inngest jobs**: bypass RLS entirely — instantiate a raw `@supabase/supabase-js` client inline in the job file with `SUPABASE_SERVICE_ROLE_KEY`, not through `@/lib/supabase`.
+
+### Other shared plumbing
+
+- **Upload-Post** (`src/services/upload-post/`, `UploadPostService`) is the only social publishing/analytics backend; social accounts are connected on Upload-Post's own dashboard, Kinetix never does OAuth. Its hosted FFmpeg API (`src/services/ffmpeg/`) is the video renderer.
+- **Logging**: `src/services/logger` (pino, level from `LOG_LEVEL`). **Client state**: zustand stores in `src/store/` (user, business); server data goes through TanStack Query hooks in each module's `hooks/`.
+- **Pagination / dashboard skeletons**: every list page uses the shared system in `src/lib/pagination.ts` + `src/components/ui/Pagination.tsx`, and dashboards use `src/components/global/DashboardKit.tsx` — see `docs/architecture/system_design.md` §6–7.
 
 ### AI orchestration
 

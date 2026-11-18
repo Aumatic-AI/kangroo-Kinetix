@@ -1,113 +1,150 @@
 # Kinetix Marketing Automation Platform
 
-Kinetix is a single-tenant marketing automation platform built for one client (Kangrooo, a Canadian space and venue booking marketplace) with Next.js, Supabase, and Tailwind CSS. It consolidates product areas — Meta Ads, Social Media, Listings, and Settings — into one codebase, one Postgres schema, and one background-job runner (Inngest).
+Kinetix is a single-tenant marketing automation platform built for one client, Kangrooo (a Canadian space and venue booking marketplace), with Next.js, Supabase, Tailwind CSS and Inngest. It is posting automation only: AI-generated content for Kangrooo's property listings, plus a social publishing tool.
 
-For a deeper tour of the system than this file covers, see [`docs/index.md`](docs/index.md). For AI-assistant-specific conventions (Claude Code), see [`CLAUDE.md`](CLAUDE.md) and [`DESIGN.md`](DESIGN.md).
+What's in the app today:
+
+| Module | Route | What it does |
+|---|---|---|
+| Dashboard | `/dashboard` | Social reach, followers and engagement rolled up live from Upload-Post |
+| Content Gallery | `/content` | AI-generated property content (images, 30 s narrated videos, LinkedIn posts, blog posts) to review. **Testing phase:** generation is manual ("Generate now") and nothing is published. Once Live, blogs are published to WordPress automatically |
+| Automation | `/content/automation` | Weekly frequency per content type, pause/resume, Testing mode |
+| Listings | `/listings` | The property inventory that content automation rotates through |
+| Social | `/social/posts`, `/social/published`, `/social`, `/social/connected-accounts` | Generate an AI image or upload media, preview it per platform, then publish now or schedule it through Upload-Post |
+| Settings | `/settings` | Business identity, brand voice, and a usage/cost estimate |
+
+The Meta Ads and Outreach modules have been removed.
+
+For a deeper tour, see [`docs/index.md`](docs/index.md). For AI-assistant conventions (Claude Code), see [`CLAUDE.md`](CLAUDE.md) and [`DESIGN.md`](DESIGN.md).
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
-- [Node.js](https://nodejs.org/en/) (v20 or higher)
+- [Node.js](https://nodejs.org/en/) v22 or higher (the test runner uses `node:test` module mocks)
 - [npm](https://www.npmjs.com/)
-- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) (`npm install -g supabase`)
-- A [Supabase](https://supabase.com/) account and project.
+- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) (run through `npx supabase`)
+- A [Supabase](https://supabase.com/) project
+- API keys for OpenAI, Kie AI and Upload-Post
 
 ---
 
-## 🚀 Project Setup & Installation
+## 🚀 Setup
 
-### 1. Install Dependencies
+### 1. Install dependencies
 ```bash
 npm install
 ```
 
-### 2. Environment Variables
-Copy the example environment file to create your local environment file:
+### 2. Environment variables
 ```bash
 cp .env.example .env.local
 ```
-Open `.env.local` and fill in your actual Supabase credentials. You can find these in your Supabase Dashboard under **Project Settings > API**:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (required — Inngest background jobs use this to bypass RLS)
+Every variable is validated at startup by `src/config/env.ts` (zod). Add any new variable there too.
 
-See `docs/architecture/system_design.md` and the module docs under `docs/modules/` for the AI-provider and integration keys (OpenAI, Kie AI, ElevenLabs, Meta, etc.) each feature needs.
+| Variable | Needed for |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Everything (Supabase Dashboard → Project Settings → API) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Inngest jobs (they bypass RLS) and the scripts in `scripts/` |
+| `OPENAI_API_KEY` | Text: planning, copy, review, vision checks |
+| `KIE_API_KEY` | Image generation and Seedance 2.5 video |
+| `UPLOAD_POST_API_KEY`, `UPLOAD_POST_PROFILE` | Social publishing, connected accounts, dashboard analytics and the FFmpeg renderer |
+| `STORAGE_PROVIDER` | Media storage backend (default `supabase`) |
+| `WORDPRESS_URL`, `WORDPRESS_USERNAME`, `WORDPRESS_APP_PASSWORD` | Publishing Live blogs to WordPress (an application password, not the wp-admin password). Check with `node --env-file=.env.local scripts/check-wordpress.mjs` |
+| `WORDPRESS_CATEGORY_ID` | Optional category for automated blog posts |
+| `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | Background jobs in production |
+| `INNGEST_DEV` | `1` locally to use the Inngest dev server. **Must be unset or `0` in production** |
+| `LOG_LEVEL` | Optional pino log level |
+| `NEXT_PUBLIC_APP_URL` | Base URL of the app (default `http://localhost:3000`) |
 
-### 3. Database Setup (Supabase)
+### 3. Database (Supabase)
 
-Kinetix manages its schema entirely through Supabase migrations — there is no separate ORM (no Prisma, no Drizzle) in this project. All database access goes through the generated Supabase client types (`src/types/supabase.ts`).
+The schema is managed entirely by SQL migrations in `supabase/migrations/`. There's no ORM: all access goes through the Supabase client, typed by the generated `src/types/supabase.ts`.
 
-**Step 3a: Login to Supabase CLI**
 ```bash
 npx supabase login
-```
-
-**Step 3b: Link your project**
-Find your Reference ID in your Supabase dashboard URL.
-```bash
-npx supabase link --project-ref <YOUR_REFERENCE_ID>
-```
-
-**Step 3c: Push the schema**
-Push every migration in `supabase/migrations/` to your linked project:
-```bash
+npx supabase link --project-ref <YOUR_PROJECT_REF>
 npx supabase db push --linked
+npx supabase gen types typescript --project-id <YOUR_PROJECT_REF> --schema public > src/types/supabase.ts
 ```
+Don't redirect stderr into the types file (`2>&1`). A CLI notice on stderr gets appended after the generated code and breaks every consumer with unrelated-looking `tsc` errors.
 
-**Step 3d: Generate types**
+### 4. Create the login
+
+There's no public signup. Create (or reset) the single user:
 ```bash
-npx supabase gen types typescript --project-id <YOUR_REFERENCE_ID> --schema public > src/types/supabase.ts
+ADMIN_PASSWORD='...' node --env-file=.env.local scripts/create-admin-user.mjs [username]
 ```
-Don't redirect stderr into that file (`2>&1`) — a CLI notice on stderr gets appended after the generated code and breaks every consumer with unrelated-looking `tsc` errors.
+A bare username signs in as `<username>@kangrooo.com` (default `kangrooo`).
 
-### 4. Start the Development Server
+### 5. Run it
 ```bash
-npm run dev
+npm run dev                      # http://localhost:3000
+npx inngest-cli@latest dev       # Inngest dev server at http://localhost:8288 (with INNGEST_DEV=1)
 ```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
-
-Background jobs (Inngest) run against a local dev server at `http://localhost:8288` when `INNGEST_DEV=1` is set in `.env.local` — see `CLAUDE.md`'s "Background jobs" section for how job registration works.
 
 ---
 
-## 📁 Project Structure
+## 🧪 Checks
+
+```bash
+npx tsc --noEmit                                  # Typecheck
+npm run lint                                      # ESLint (has pre-existing errors today)
+node --test scripts/tests/*.test.mjs              # Unit tests (pure logic, no network or DB)
+node --experimental-test-module-mocks --import ./scripts/tests/alias-register.mjs \
+  --test scripts/tests/legacy-social-routes.test.mjs   # This file needs module mocks
+```
+
+---
+
+## 📁 Project structure
 
 ```text
 kinetix/
 ├── src/
-│   ├── app/                 # Next.js App Router (pages, layouts, API routes)
-│   │   ├── (app)/           # Main dashboard routes, one folder per module
-│   │   ├── (auth)/          # Public auth routes (login/signup)
-│   │   └── api/             # API routes — thin, delegate to services/hooks
+│   ├── app/
+│   │   ├── (app)/            # Signed-in pages: dashboard, content, listings, social, settings (thin files)
+│   │   ├── (auth)/login/     # The only public page
+│   │   └── api/              # API routes: business, content, dashboard, inngest, listings, profile, settings, social, usage
 │   ├── components/
-│   │   ├── ui/              # Shared design-system components (Button, Table, Dialog, …) — see DESIGN.md
-│   │   ├── layout/           # App shell (Navbar, PrimarySidebar, SecondarySidebar)
-│   │   └── global/          # Cross-module widgets (background job tracker, etc.)
-│   ├── config/               # Route constants (routes.ts) and nav config (navigation.ts)
-│   ├── modules/              # Domain-driven feature modules — the core logic
-│   │   ├── auth/
-│   │   ├── dashboard/
-│   │   ├── meta-ads/         # Ad creative generation, competitor/self-ad intelligence (built)
-│   │   ├── social/            # OAuth, content generation, publishing (built)
-│   │   └── settings/
-│   │       └── each module has its own pages/, components/, hooks/, services/, types/
-│   ├── services/              # External integrations (Supabase, Inngest jobs, AI orchestrator, Meta Graph API, …)
-│   ├── prompts/               # AI prompt-building functions, one file per domain
-│   ├── jobs/                  # Inngest background job definitions (*.job.ts)
-│   ├── styles/                # globals.css — design tokens + Tailwind v4 setup
-│   └── types/                 # Global TypeScript types, incl. generated Supabase types
+│   │   ├── ui/               # Shared design-system components (Button, Table, Dialog, Drawer, …), see DESIGN.md
+│   │   ├── layout/           # App shell: Navbar, Sidebar, ProfileMenu
+│   │   ├── global/           # Cross-module widgets: DashboardKit, TabSwitch
+│   │   └── providers/        # QueryProvider, SessionBootstrap
+│   ├── config/               # env.ts (validated env), routes.ts, navigation.ts, nav-active.ts
+│   ├── modules/              # One folder per module: auth, content, dashboard, listings, settings, social
+│   │                         #   each with pages/, components/, hooks/, and lib/, services/, types/ as needed
+│   ├── services/
+│   │   ├── ai/               # aiOrchestrator plus the OpenAI and Kie providers
+│   │   ├── content-automation/  # Strategy, agents, QA, scheduling, rotation claims, video spec, branding, publish worker
+│   │   ├── inngest/          # Inngest client, the registered functions list, content and social jobs
+│   │   ├── upload-post/      # Upload-Post publishing, profiles, analytics, status
+│   │   ├── wordpress/        # WordPress REST client (Live blog publishing)
+│   │   ├── ffmpeg/           # Upload-Post's hosted FFmpeg renderer
+│   │   ├── storage/          # Media storage
+│   │   └── logger/           # pino logger
+│   ├── jobs/                 # social-scheduled-post-check.job.ts
+│   ├── prompts/              # Prompt builders: content-automation/, social-media/
+│   ├── lib/                  # Supabase clients, business lookup, pagination, cost estimates
+│   ├── store/                # zustand stores (user, business)
+│   ├── styles/globals.css    # Design tokens and Tailwind v4 setup
+│   ├── types/                # Shared types, including generated supabase.ts
+│   └── proxy.ts              # Next 16 middleware: no session → /login (API routes aren't gated)
 ├── supabase/
-│   └── migrations/            # SQL migration files — the source of truth for the schema
-├── docs/                       # Deep reference docs — architecture, modules, AI pipelines
-└── public/                     # Static assets
+│   ├── migrations/           # SQL migrations, the source of truth for the schema
+│   └── config.toml
+├── scripts/
+│   ├── create-admin-user.mjs
+│   ├── check-wordpress.mjs   # Read-only WordPress credentials check
+│   ├── inventory-import/     # Normalize content.xlsx → upsert properties (dry-run by default)
+│   └── tests/                # node:test unit tests
+└── docs/                     # Architecture and module reference docs
 ```
 
 ## 🛠️ Architecture
 
-- **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS v4
-- **Backend/Database:** Supabase (PostgreSQL, Row Level Security, Supabase Auth)
-- **Background jobs:** Inngest (event-driven step functions for long-running AI/scraping work)
-- **Data fetching:** TanStack Query (`@tanstack/react-query`) + the Supabase JS client
-- **AI providers:** OpenAI, Kie AI, ElevenLabs, AssemblyAI — always called through `aiOrchestrator` (`src/services/ai/orchestrator.ts`), never a provider SDK directly from a route
+- **Frontend:** Next.js 16 (App Router, dev server on webpack), React 19, Tailwind CSS v4, TanStack Query v5, zustand
+- **Backend/database:** Next.js API routes; Supabase (PostgreSQL, Row Level Security, Supabase Auth with email/password only)
+- **Background jobs:** Inngest. Every function is listed in `src/services/inngest/functions.ts`, and the weekly content cron is declared on the function itself (there's no Vercel cron).
+- **AI:** OpenAI (text) and Kie AI (images, Seedance 2.5 video with native narration). Always called through `aiOrchestrator` (`src/services/ai/orchestrator.ts`).
+- **Media and publishing:** Upload-Post handles social publishing and analytics and hosts the FFmpeg renderer (logo overlay, fade, end card); sharp stamps the logo on images. Kinetix does no social OAuth itself: accounts are connected on Upload-Post.
 
-See [`docs/architecture/system_design.md`](docs/architecture/system_design.md) for the full request/job flow.
+See [`docs/architecture/system_design.md`](docs/architecture/system_design.md) for the full request and job flow, and [`docs/architecture/content_automation.md`](docs/architecture/content_automation.md) for content automation.

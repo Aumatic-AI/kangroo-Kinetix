@@ -1,8 +1,8 @@
 # Content Automation — Data Model & Safeguards
 
-> **Status: all content-automation migrations are applied to the linked project** (`20261031000000_content_automation_schema.sql` plus `20261102000000` manual trigger, `20261103000000` week plan, `20261106000000` blog pipeline, `20261107000000` gallery delete, `20261112134926` exact-count trigger).
+> **Status: all content-automation migrations are applied to the linked project** (`20261031000000_content_automation_schema.sql` plus `20261102000000` manual trigger, `20261103000000` week plan, `20261106000000` blog pipeline, `20261107000000` gallery delete, `20261112134926` exact-count trigger, `20261114000000` image/video split, `20261118000000` blog → WordPress publishing).
 > Source: `supabase/migrations/20261031000000_content_automation_schema.sql` and the later migrations above. Product requirements: [`../kangrooo-content-automation-spec.md`](../kangrooo-content-automation-spec.md). Where this file and the spec disagree, this file reflects the migration (the spec's §15 table list was superseded — see "Deviations from the spec").
-> What exists today: the **database layer, the publishing worker service (not scheduled), the guarded API routes, and — for the testing phase — the generation worker, the gallery and the Automation page** (see §10). Publishing is **not wired**: generated content only reaches the gallery.
+> What exists today: the **database layer, the publishing worker service (not scheduled), the guarded API routes, and — for the testing phase — the generation worker, the gallery and the Automation page** (see §10). Social publishing is **not wired**. **Blog publishing to WordPress is wired for Live content only** (§13); in Testing every content type stays in the gallery.
 
 ## 1. The 12 new tables
 
@@ -20,6 +20,8 @@
 | 10 | `content_clips` | Per-clip state of a video revision (always exactly 1 clip, index 1; the schema still allows a second row from the pre-rule design): provider task id, status, media, attempts, error. A completed clip is immutable → retries reuse it. |
 | 11 | `publishing_logs` | One row per publish attempt (`started/succeeded/failed/unknown/blocked`) with the post's idempotency key and request/response metadata. |
 | 12 | `content_performance` | Nullable engagement snapshots per published post. Unsupported metrics stay NULL. |
+
+**Added later — `blog_publications`** (`20261118000000`): one row per **Live** blog creative, its WordPress post id/URL, uploaded media and publish state (§13). Not one of the original 12.
 
 **`social_posts` is existing and is *modified*, not counted**: new nullable columns (`property_content_id`, `content_revision_id`, `platform`, `environment`, `hashtags`, `platform_metadata`, `schedule_timezone`, `platform_post_id`, `idempotency_key`, `publish_attempt_count`, `retry_base_attempt`, `next_attempt_at`, `publish_started_at`, `locked_by/until`, `publish_outcome_unknown`), statuses `held/cancelled/skipped` added, format `text_image` added. `property_content_id IS NULL` ⇒ a manual Social-module post; nothing about those rows changes.
 
@@ -208,9 +210,9 @@ The gallery drawer shows the chosen voice under "Creative strategy".
 
 **Proposed times** are the AI's reasoning, not guarantees. Property timezone isn't in the imported data, so scheduling uses `content_automation_settings.generation_timezone` (default America/Toronto) as the fallback the spec allows.
 
-## 11. Blog pipeline (display only)
+## 11. Blog pipeline
 
-A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`. For one listing the AI writes a detailed, informational article from the listing's own data and generates its images from the listing photos. It is **display-only**: it lives in the gallery tables, never gets a `social_posts` row, a platform, a schedule or a posting time, and nothing is published (`20261106000000_content_blog_pipeline.sql`).
+A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`. For one listing the AI writes a detailed, informational article from the listing's own data and generates its images from the listing photos. It never gets a `social_posts` row, a platform, a schedule or a posting time (`20261106000000_content_blog_pipeline.sql`). In **Testing** it stays in the gallery; a **Live** blog is published to WordPress as soon as it is generated (§13).
 
 **Schema (additive).** `blog` is allowed in the pipeline / content-type CHECKs of the queue, promotions and `property_content`; `content_automation_settings.blog_frequency_per_week` and `content_generation_cycles.blog_target_count` (0–14); `ensure_cycle_slots` creates blog slots; `trigger_manual_content_cycle(p_social, p_linkedin, p_blog)` gains `p_blog` (default 0; same Testing-only / editor+ rules); `content_revisions_guard` requires a title and body before a blog revision can be validated. No blog-specific columns — the post is stored as: `script` = title, `caption` = full Markdown (images inlined), `hashtags` = tags, `format_reason`, `media_asset_id` = hero image, `content_decision.blog` = the structured post (blocks, images, angle, format, word count, what the AI saw in the photos).
 
@@ -225,9 +227,9 @@ A third pipeline, `blog` (content type `blog`), next to `social` and `linkedin`.
 
 **What the AI may and may not say.** The only venue facts are the listing's fields and the photo observations. Everything else must be general planning advice that never reads as a claim about the venue; unknown details (parking, catering, capacity, accessibility, equipment) are left for the reader to check with the host. The data we hold is thin (title, one of five categories, event types, city, up to five photos), so there are no invented neighbourhood facts, prices, capacity or ratings.
 
-**Gallery.** A "Blogs" filter; blog cards show the title and hero; the drawer renders the post as a reader would see it (`BlogView.tsx`), the format and angle the AI chose and why, what it saw in the photos, and a **Copy Markdown** button (the only way a post leaves the gallery). Regenerate keeps earlier revisions and picks a fresh angle unless a note says otherwise. Weekly frequency is set in Automation; **Generate now** adds one blog alongside the social and LinkedIn creatives.
+**Gallery.** A "Blogs" filter; blog cards show the title and hero; the drawer renders the post as a reader would see it (`BlogView.tsx`), the format and angle the AI chose and why, what it saw in the photos, a **Copy Markdown** button, and for a Live blog a **WordPress** section (status, link to the post, Retry when it failed or is on hold). Regenerate keeps earlier revisions and picks a fresh angle unless a note says otherwise. Weekly frequency is set in Automation; **Generate now** adds one blog alongside the social and LinkedIn creatives.
 
-**Not covered.** Publishing a blog anywhere (no destination exists), SEO tooling, and blog-specific rows in the per-listing promotion stats (the existing `property_promotion_stats` view counts a blog in `generated_count`).
+**Not covered.** SEO tooling (no Yoast/Rank Math fields; the meta description becomes the WordPress excerpt), and blog-specific rows in the per-listing promotion stats (the existing `property_promotion_stats` view counts a blog in `generated_count`).
 
 ## 12. Listing photos as reference images (format + copyright)
 
@@ -268,3 +270,44 @@ A stage whose photos are identical to the previous stage's is skipped, so a reje
 - Automatically switching a video that fails every stage into an image post. The job fails; regenerate it as an image.
 - Fixing the content type on `api.kangrooo.com` itself, which is outside this repo.
 - Image posts aren't audited by Kie, so a social image could still reproduce a character if the prompt rule is ignored.
+
+## 13. Blog publishing to WordPress (Live only)
+
+Migration `20261118000000_blog_wordpress_publishing.sql`; worker `src/services/inngest/content/publish-blog.ts` (Inngest `content-blog-publish`, event `content/blog-publish`); client `src/services/wordpress/`; pure logic `src/services/content-automation/blog-wordpress.ts` (tested in `scripts/tests/content-blog-wordpress.test.mjs`). Destination: `WORDPRESS_URL` (blog.kangrooo.ca) with an application password (`WORDPRESS_USERNAME`, `WORDPRESS_APP_PASSWORD`); optional `WORDPRESS_CATEGORY_ID`, otherwise WordPress's default category. `node --env-file=.env.local scripts/check-wordpress.mjs` checks the credentials read-only.
+
+**Testing never publishes.** `blog_publications.environment` must be `live` (CHECK) and the insert guard rejects Testing content, non-blog content, and anything but the current valid revision.
+
+**When.** A blog is published as soon as it is generated; there is no schedule. A trigger on `property_content` creates the row the moment a Live blog is `completed` with a current revision. After the job completes, `kickBlogPublication` sends `content/blog-publish`; a Live regeneration does the same.
+
+**States.**
+```
+pending    → publishing | held | skipped
+publishing → published | failed | pending (retry with backoff) | held | skipped
+held       → pending | skipped
+failed     → pending (gallery Retry) | skipped
+```
+`published` and `skipped` are terminal.
+
+**Steps.**
+1. `claim_blog_publication` locks the row with a 15-minute lease. It first runs `blog_publish_block_reason`: Live row, Live content, automation enabled **and** mode Live, property active, content not archived, revision current and valid. Paused or not Live → `held`; any other block → `skipped`. A `publishing` row whose lease expired can be claimed again.
+2. Each image (hero + inline) is downloaded from our storage and uploaded to the WordPress media library, with alt text and caption. Each result is saved in `wp_media` as soon as it finishes, so a retry never uploads it twice.
+3. Right before the post is created, `blog_publish_block_reason` runs again.
+4. WordPress has no idempotency key, so the worker first searches for a post it already made: the exact title, created no earlier than the row (allowing 10 minutes of clock skew). If one is found, it is adopted. Otherwise the worker creates the post with `status: "publish"`:
+   - title, slug and excerpt (the meta description);
+   - the body as block-editor markup (`blogToWordPressHtml`, all text escaped);
+   - the hero image as the featured image (not repeated in the body);
+   - the tags, found or created (best effort).
+5. The post id and URL are saved the moment they're known, and `finish_blog_publication` marks the row `published`.
+
+**Failures.** `classifyWordPressFailure`:
+- **Retry:** no response, 408/409/425/429 or 5xx. The row goes back to `pending` with a 5·n minute backoff and becomes `failed` after 5 attempts. Retrying is safe even if the post landed, because of the own-post lookup.
+- **Fail:** any other 4xx (bad credentials, missing permission, invalid data) → `failed`.
+
+The gallery's Retry button (`POST /api/content/wordpress/retry` → `retry_blog_publication`, editors) re-runs the checks before re-queuing.
+
+**Mode switches.** The settings trigger holds `pending` rows when automation is paused or leaves Live, and releases `held` rows when it goes Live again. The settings API then sends the publish event for every pending row.
+
+**Integrity.** A Live blog with a publication row can't be regenerated (`request_content_regeneration`). While its row is pending, held, publishing or published it can't switch revision. It can't be deleted from the gallery, because the RESTRICT foreign key blocks that. Nothing ever updates or deletes the WordPress post afterwards.
+
+**Still locked.** The settings API still refuses Live mode and automatic weekly runs. Going Live means lifting that lock, which also starts Live social generation. Social publishing (§9) is still not wired.
+

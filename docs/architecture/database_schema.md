@@ -232,10 +232,11 @@ Inngest jobs write with the service-role key, which bypasses RLS entirely — ex
     - `20261031000000_content_automation_schema.sql`: the 12 tables, the `social_posts` extensions, rotation and publishing functions, RLS.
     - `20261102000000_content_manual_trigger.sql`: video format/duration on revisions, proposed schedules, `auto_run_enabled`, the manual "Generate now" trigger.
     - `20261103000000_content_cycle_week_plan.sql`: `content_generation_cycles.week_plan`.
-    - `20261106000000_content_blog_pipeline.sql`: the display-only `blog` pipeline and `blog_frequency_per_week`.
+    - `20261106000000_content_blog_pipeline.sql`: the `blog` pipeline and `blog_frequency_per_week`.
     - `20261107000000_content_delete.sql`: `delete_content_item` (permanent gallery delete).
     - `20261112134926_content_trigger_exact_jobs.sql`: "Generate now" creates exactly the requested jobs.
     - `20261114000000_social_image_video_split.sql`: the user chooses image vs video for social. `content_automation_settings.social_image_frequency_per_week` / `social_video_frequency_per_week` (together ≤ 14; `social_frequency_per_week` becomes their generated total), `content_generation_cycles.social_video_target_count`, `ensure_cycle_slots` sets each social slot's `content_type`, and `trigger_manual_content_cycle(p_social_image, p_social_video, p_linkedin, p_blog)` replaces the 3-argument version.
+    - `20261118000000_blog_wordpress_publishing.sql`: `blog_publications` (one row per **Live** blog: WordPress post id/URL, uploaded media, publish state), its guard/claim/finish/retry functions, and the hold/release, regenerate and revision-switch rules extended to it.
 
 ## 12. Worked Examples
 

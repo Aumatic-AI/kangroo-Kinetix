@@ -55,6 +55,94 @@ export type Database = {
           },
         ]
       }
+      blog_publications: {
+        Row: {
+          attempt_count: number
+          business_id: string
+          content_revision_id: string
+          created_at: string
+          destination: string
+          environment: string
+          error_message: string | null
+          id: string
+          locked_by: string | null
+          locked_until: string | null
+          next_attempt_at: string
+          property_content_id: string
+          publish_started_at: string | null
+          published_at: string | null
+          status: string
+          updated_at: string
+          wp_media: Json
+          wp_post_id: number | null
+          wp_url: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          business_id: string
+          content_revision_id: string
+          created_at?: string
+          destination?: string
+          environment?: string
+          error_message?: string | null
+          id?: string
+          locked_by?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          property_content_id: string
+          publish_started_at?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          wp_media?: Json
+          wp_post_id?: number | null
+          wp_url?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          business_id?: string
+          content_revision_id?: string
+          created_at?: string
+          destination?: string
+          environment?: string
+          error_message?: string | null
+          id?: string
+          locked_by?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          property_content_id?: string
+          publish_started_at?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          wp_media?: Json
+          wp_post_id?: number | null
+          wp_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_publications_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_blog_pub_content"
+            columns: ["property_content_id", "business_id"]
+            isOneToOne: false
+            referencedRelation: "property_content"
+            referencedColumns: ["id", "business_id"]
+          },
+          {
+            foreignKeyName: "fk_blog_pub_revision"
+            columns: ["content_revision_id", "property_content_id"]
+            isOneToOne: false
+            referencedRelation: "content_revisions"
+            referencedColumns: ["id", "property_content_id"]
+          },
+        ]
+      }
       business_users: {
         Row: {
           business_id: string
@@ -1381,6 +1469,14 @@ export type Database = {
       }
     }
     Functions: {
+      blog_publish_block_reason: {
+        Args: { p_expect_status: string; p_id: string }
+        Returns: string
+      }
+      claim_blog_publication: {
+        Args: { p_id: string; p_lease?: string; p_worker: string }
+        Returns: string
+      }
       claim_generation_jobs: {
         Args: { p_lease?: string; p_limit?: number; p_worker: string }
         Returns: {
@@ -1510,6 +1606,17 @@ export type Database = {
         }
         Returns: string
       }
+      finish_blog_publication: {
+        Args: {
+          p_error?: string
+          p_id: string
+          p_outcome: string
+          p_worker: string
+          p_wp_post_id?: number
+          p_wp_url?: string
+        }
+        Returns: string
+      }
       finish_publish: {
         Args: {
           p_attempt: number
@@ -1574,6 +1681,7 @@ export type Database = {
         }
         Returns: string
       }
+      retry_blog_publication: { Args: { p_id: string }; Returns: string }
       retry_failed_publish: { Args: { p_post: string }; Returns: string }
       trigger_manual_content_cycle: {
         Args: {

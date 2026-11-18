@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { loadMedia } from "@/modules/content/lib/media";
 import { toItem, toRevision, type ContentRow, type RevisionRow } from "@/modules/content/lib/mappers";
-import type { ClipSummary, ContentDetail, CreativeStrategySummary } from "@/modules/content/types/content.types";
+import type { ClipSummary, ContentDetail, CreativeStrategySummary, WordPressPublication } from "@/modules/content/types/content.types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,13 +41,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (error) throw new Error(error.message);
     if (!content) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const [revRes, clipRes, propRes] = await Promise.all([
+    const [revRes, clipRes, propRes, pubRes] = await Promise.all([
       supabase.from("content_revisions")
         .select("id, property_content_id, revision_number, caption, hashtags, script, video_format, video_duration, format_reason, validation_status, validation_errors, media_asset_id, proposed_schedule, generation_prompt, created_at, content_decision")
         .eq("property_content_id", id).order("revision_number", { ascending: false }),
       supabase.from("content_clips").select("revision_id, clip_index, status, duration_seconds, media_asset_id, last_error, attempts").eq("property_content_id", id).order("clip_index"),
       supabase.from("properties").select("id, title, city").eq("id", content.property_id).maybeSingle(),
+      content.pipeline_type === "blog"
+        ? supabase.from("blog_publications").select("id, status, wp_url, error_message, attempt_count, published_at").eq("property_content_id", id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+    const pub = pubRes.data as { id: string; status: WordPressPublication["status"]; wp_url: string | null; error_message: string | null; attempt_count: number; published_at: string | null } | null;
     if (revRes.error) throw new Error(revRes.error.message);
     if (clipRes.error) throw new Error(clipRes.error.message);
 
@@ -72,6 +76,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         reason: d.reason, concept: d.concept ?? d.format, theme: d.theme ?? d.angle,
         strategy: toStrategy(d), warnings: currentRow?.content_decision?.warnings,
       } : null,
+      wordpress: pub ? { id: pub.id, status: pub.status, url: pub.wp_url, error: pub.error_message, attempts: pub.attempt_count, publishedAt: pub.published_at } : null,
     };
     return NextResponse.json(body);
   } catch (error: unknown) {
@@ -98,7 +103,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         "42501": [403, "You don't have permission to delete this item."],
         P0002: [404, "Not found"],
         "55006": [409, "This item is still generating. Wait for it to finish or fail, then delete it."],
-        "23503": [409, "This item is referenced by a post and can't be deleted."],
+        "23503": [409, "This item has been published (or is queued to be) and can't be deleted."],
       };
       const [status, message] = map[error.code] ?? [500, error.message];
       return NextResponse.json({ error: message }, { status });

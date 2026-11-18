@@ -39,7 +39,9 @@ export function useContentDetail(id: string | null) {
     queryKey: contentKeys.detail(id ?? ""),
     queryFn: () => fetchJson<ContentDetail>(`/api/content/${id}`),
     enabled: !!id,
-    refetchInterval: (q) => (q.state.data?.item.generationStatus === "processing" || q.state.data?.item.regenerating ? POLL_MS : false),
+    refetchInterval: (q) => (
+      q.state.data?.item.generationStatus === "processing" || q.state.data?.item.regenerating
+      || q.state.data?.wordpress?.status === "pending" || q.state.data?.wordpress?.status === "publishing" ? POLL_MS : false),
   });
 }
 
@@ -95,6 +97,18 @@ export function useRegenerate() {
     mutationFn: ({ contentId, prompt }: { contentId: string; prompt?: string }) =>
       fetchJson<{ success: true; revisionId: string }>("/api/content/regenerate", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentId, prompt }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contentKeys.all }),
+  });
+}
+
+/** Re-queue a Live blog's failed or held WordPress publication. */
+export function useRetryWordPress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (publicationId: string) =>
+      fetchJson<{ success: true }>("/api/content/wordpress/retry", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publicationId }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: contentKeys.all }),
   });

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -11,11 +11,11 @@ import { Loader } from "@/components/ui/Loader";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/utils/datetime";
 import { Pill, Field } from "@/modules/listings/components/ListingBits";
-import { useContentDetail, useRegenerate } from "../hooks/useContent";
+import { useContentDetail, useRegenerate, useRetryWordPress } from "../hooks/useContent";
 import { PLATFORM_LABEL, TYPE_LABEL, describeMedia, formatSlot } from "../lib/format";
 import { BlogView } from "./BlogView";
 import { GenerationChip, MediaPreview } from "./ContentBits";
-import type { ContentDetail, RevisionSummary } from "../types/content.types";
+import type { ContentDetail, RevisionSummary, WordPressPublication } from "../types/content.types";
 
 const VALIDATION_TONE = { valid: "success", pending: "warning", invalid: "danger" } as const;
 
@@ -24,6 +24,49 @@ const humanize = (v: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1).repl
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-lg font-semibold text-text">{children}</h3>;
+}
+
+const WP_STATUS: Record<WordPressPublication["status"], { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  pending: { label: "Queued", tone: "warning" },
+  publishing: { label: "Publishing", tone: "warning" },
+  published: { label: "Published", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  held: { label: "On hold", tone: "warning" },
+  skipped: { label: "Skipped", tone: "neutral" },
+};
+
+/** Where a blog goes: Testing blogs stay here; a Live blog is published to WordPress as soon as it's generated. */
+function WordPressSection({ environment, publication }: { environment: "testing" | "live"; publication: WordPressPublication | null }) {
+  const retry = useRetryWordPress();
+  if (environment === "testing") {
+    return <p className="text-xs text-muted">Testing content stays in the gallery and is never published. Once automation is Live, each new blog is published to WordPress as soon as it&apos;s generated. Use Copy Markdown to take this post elsewhere.</p>;
+  }
+  if (!publication) {
+    return <p className="text-xs text-muted">This blog will be published to WordPress once it has a valid version.</p>;
+  }
+  const s = WP_STATUS[publication.status];
+  return (
+    <div className="space-y-2">
+      <SectionTitle>WordPress</SectionTitle>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Pill tone={s.tone}>{s.label}</Pill>
+        {publication.publishedAt && <span className="text-xs text-muted">{formatDateTime(publication.publishedAt)}</span>}
+        {publication.url && (
+          <a href={publication.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-medium text-text underline underline-offset-2">
+            View post <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+        {(publication.status === "failed" || publication.status === "held") && (
+          <div className="ml-auto">
+            <Button size="sm" variant="outline" loading={retry.isPending} onClick={() => retry.mutate(publication.id)}>Retry</Button>
+          </div>
+        )}
+      </div>
+      {publication.status === "held" && <p className="text-xs text-muted">Automation is paused or not Live. It publishes when automation is Live again.</p>}
+      {publication.error && <p className="text-xs text-danger">{publication.error}</p>}
+      {retry.error && <p className="text-xs text-danger">{retry.error.message}</p>}
+    </div>
+  );
 }
 
 function Body({ detail }: { detail: ContentDetail }) {
@@ -253,7 +296,7 @@ function Body({ detail }: { detail: ContentDetail }) {
       )}
 
       {isBlog ? (
-        <p className="text-xs text-muted">Blogs are display-only: they have no platform, schedule or posting time, and nothing is published. Use Copy Markdown to take the post elsewhere.</p>
+        <WordPressSection environment={item.environment} publication={detail.wordpress} />
       ) : (
         <div className="space-y-2">
           <SectionTitle>Proposed posting times</SectionTitle>
@@ -312,7 +355,7 @@ export function ContentDetailDrawer({ contentId, title, onClose }: { contentId: 
       <DrawerContent className="data-[swipe-axis=x]:sm:[--drawer-content-width:720px]">
         <DrawerHeader>
           <DrawerTitle>{data?.item.propertyTitle ?? title ?? "Content"}</DrawerTitle>
-          <DrawerDescription>{data ? `${TYPE_LABEL[data.item.contentType]} · ${data.item.pipeline === "linkedin" ? "LinkedIn" : data.item.pipeline === "blog" ? "Display only" : "TikTok, Instagram, Facebook"}` : "Loading…"}</DrawerDescription>
+          <DrawerDescription>{data ? `${TYPE_LABEL[data.item.contentType]} · ${data.item.pipeline === "linkedin" ? "LinkedIn" : data.item.pipeline === "blog" ? (data.item.environment === "live" ? "WordPress" : "Gallery only (Testing)") : "TikTok, Instagram, Facebook"}` : "Loading…"}</DrawerDescription>
         </DrawerHeader>
         <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6">
           {isLoading ? (

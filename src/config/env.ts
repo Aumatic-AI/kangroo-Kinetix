@@ -19,6 +19,13 @@ const envSchema = z.object({
 
   STORAGE_PROVIDER: z.enum(["supabase", "s3", "local"]).default("supabase"),
 
+  // Blog publishing (Live content automation only — see src/services/wordpress)
+  WORDPRESS_URL: z.string().url().optional(),
+  WORDPRESS_USERNAME: z.string().optional(),
+  WORDPRESS_APP_PASSWORD: z.string().optional(),
+  /** Optional category id for automated posts; WordPress's default category when unset. */
+  WORDPRESS_CATEGORY_ID: z.coerce.number().int().positive().optional(),
+
   // Background jobs (Inngest)
   INNGEST_EVENT_KEY: z.string().optional(),
 
@@ -42,6 +49,11 @@ const _env = envSchema.safeParse({
   UPLOAD_POST_PROFILE: process.env.UPLOAD_POST_PROFILE,
 
   STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
+
+  WORDPRESS_URL: process.env.WORDPRESS_URL || undefined,
+  WORDPRESS_USERNAME: process.env.WORDPRESS_USERNAME || undefined,
+  WORDPRESS_APP_PASSWORD: process.env.WORDPRESS_APP_PASSWORD || undefined,
+  WORDPRESS_CATEGORY_ID: process.env.WORDPRESS_CATEGORY_ID || undefined,
 
   INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
 

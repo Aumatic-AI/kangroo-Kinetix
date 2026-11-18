@@ -3,6 +3,7 @@ import { generateCreative } from "./generate-creative";
 import { supabase, rpc, isPermanentError, cleanErrorMessage } from "./shared";
 import { addDays, mondayOf } from "@/services/content-automation/schedule";
 import { planCycleWeek } from "@/services/content-automation/plan-week";
+import { kickBlogPublication } from "./publish-blog";
 
 /**
  * Content-automation generation functions.
@@ -11,7 +12,9 @@ import { planCycleWeek } from "@/services/content-automation/plan-week";
  * content_automation_settings.auto_run_enabled (default false) — so during the
  * testing phase generation only starts from the manual "Generate now" button
  * (POST /api/content/trigger → content/process-queue) or a gallery regenerate.
- * No function here ever publishes: output only reaches the gallery tables.
+ * No function here publishes. Output reaches the gallery tables; a LIVE blog additionally
+ * gets a blog_publications row (DB trigger) and kickBlogPublication hands it to
+ * publish-blog.ts. Testing content never leaves the gallery.
  */
 
 /** Claims pending queue jobs (only while automation is enabled and the cycle's
@@ -55,6 +58,8 @@ export const generateContentJob = inngest.createFunction(
         forceType: job.pipeline_type === "social" && (job.content_type === "image" || job.content_type === "video") ? job.content_type : null,
       });
       await step.run("complete-job", () => rpc("complete_generation_job", { p_queue: queueId, p_worker: worker }));
+      // A Live blog is published to WordPress as soon as it is generated (never in Testing).
+      if (job.pipeline_type === "blog" && job.environment === "live") await kickBlogPublication(step, result.contentId);
       await step.sendEvent("next-batch", { name: "content/process-queue", data: {} });
       return { status: "completed", ...result };
     } catch (e) {
@@ -106,6 +111,8 @@ export const regenerateContentRevision = inngest.createFunction(
         cycleId: ctx.cycle_id, environment: ctx.environment as "testing" | "live", contentId, revisionId, guidance: ctx.guidance,
         forceType: ctx.pipeline_type === "social" ? (ctx.content_type as "image" | "video") : null,
       });
+      // A Live blog that failed before it was ever published can be regenerated; publish it now.
+      if (ctx.pipeline_type === "blog" && ctx.environment === "live") await kickBlogPublication(step, contentId);
       return { status: "completed", ...result };
     } catch (e) {
       const message = cleanErrorMessage(e);

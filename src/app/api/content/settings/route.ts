@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/services/inngest/client";
 import type { Database } from "@/types/supabase";
 import type { AutomationSettings } from "@/modules/content/types/content.types";
 
@@ -88,6 +89,13 @@ export async function PATCH(request: Request) {
     const { error } = await supabase.from("content_automation_settings").update(update).eq("business_id", businessId);
     if (error) return NextResponse.json({ error: error.message }, { status: error.code === "42501" ? 403 : 400 });
     const { row: fresh } = await load();
+    // Going Live (or resuming while Live): the settings trigger moved held blog publications
+    // back to pending — hand them to the WordPress publisher.
+    const wasLive = row.automation_mode === "live" && row.is_enabled;
+    if (!wasLive && fresh.automation_mode === "live" && fresh.is_enabled) {
+      const { data: pending } = await supabase.from("blog_publications").select("id").eq("business_id", businessId).eq("status", "pending");
+      if (pending?.length) await inngest.send(pending.map((p) => ({ name: "content/blog-publish", data: { publicationId: p.id } })));
+    }
     return NextResponse.json({ settings: toBody(fresh, canAdmin) });
   } catch (error: unknown) {
     const status = (error as { status?: number }).status ?? 500;

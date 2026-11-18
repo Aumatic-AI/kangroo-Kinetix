@@ -110,11 +110,23 @@ export interface GalleryResponse {
 
 export interface ClipSummary { index: number; status: string; durationSeconds: number | null; mediaUrl: string | null; lastError: string | null; attempts: number }
 
+/** A Live blog's WordPress publication (blog_publications). Testing blogs never have one. */
+export interface WordPressPublication {
+  id: string;
+  status: "pending" | "publishing" | "published" | "failed" | "held" | "skipped";
+  url: string | null;
+  error: string | null;
+  attempts: number;
+  publishedAt: string | null;
+}
+
 export interface ContentDetail {
   item: GalleryItem;
   revisions: RevisionSummary[];
   clips: Record<string, ClipSummary[]>;   // by revision id
   decision: { reason?: string; concept?: string; theme?: string; strategy?: CreativeStrategySummary; warnings?: string[] } | null;
+  /** Blogs only; null until a Live blog is generated. */
+  wordpress: WordPressPublication | null;
 }
 
 export interface RevisionQa {
