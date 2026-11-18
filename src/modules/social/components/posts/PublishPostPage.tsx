@@ -79,6 +79,9 @@ export function PublishPostPage() {
   const [step, setStep] = useState<Step>(skipSelectStep ? "preview" : "select");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preparedRows, setPreparedRows] = useState<PreparedPlatformRow[]>([]);
+  // Set on the first click and held for the whole post (caption saves + publish), so a second click
+  // can't start a second publish. The server also refuses a post that's no longer a draft.
+  const [submitting, setSubmitting] = useState(false);
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState("");
@@ -111,7 +114,7 @@ export function PublishPostPage() {
     return (
       <div className="max-w-2xl mx-auto text-center py-24">
         <p className="text-muted">No post selected to publish.</p>
-        <Link href={ROUTES.SOCIAL.POSTS} className="text-primary font-semibold text-sm mt-2 inline-block">Back to Gallery</Link>
+        <Link href={ROUTES.SOCIAL.POSTS} className="text-primary font-semibold text-sm mt-2 inline-block">Back to Posts</Link>
       </div>
     );
   }
@@ -123,7 +126,7 @@ export function PublishPostPage() {
           onClick={goToPosts}
           className="flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-text transition-colors mb-4"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Gallery
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Posts
         </button>
 
         <Stepper
@@ -214,6 +217,8 @@ export function PublishPostPage() {
   };
 
   const handlePost = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     setError("");
     try {
       const edited = preparedRows.filter((r) =>
@@ -228,10 +233,14 @@ export function PublishPostPage() {
         })));
       }
       const scheduledDate = publishMode === "schedule" && scheduleDate ? scheduleDate.toISOString() : undefined;
-      await publishMutation.mutateAsync({ socialPostIds: preparedRows.map((r) => r.id), scheduledDate });
+      // Platforms that already went out are never sent again.
+      const ids = preparedRows.filter((r) => !publishedPlatforms.has(r.platform)).map((r) => r.id);
+      if (!ids.length) throw new Error("Every selected platform already has this post.");
+      await publishMutation.mutateAsync({ socialPostIds: ids, scheduledDate });
       goToPosts();
     } catch (e: any) {
       setError(e.message || "Failed to publish");
+      setSubmitting(false);
     }
   };
 
@@ -281,8 +290,9 @@ export function PublishPostPage() {
                   <button
                     key={p.platform}
                     type="button"
-                    disabled={!supportsFormat}
-                    onClick={() => supportsFormat && toggle(p.platform)}
+                    disabled={!supportsFormat || isPosted}
+                    title={isPosted ? "Already posted to this platform" : undefined}
+                    onClick={() => supportsFormat && !isPosted && toggle(p.platform)}
                     className={cn(
                       "relative flex flex-col items-center justify-center gap-1.5 w-56 h-32 rounded-xl border border-default bg-background transition-all",
                       supportsFormat ? "hover:bg-surface" : "opacity-50 cursor-not-allowed"
@@ -469,11 +479,11 @@ export function PublishPostPage() {
               </Button>
               <Button
                 onClick={handlePost}
-                disabled={publishMutation.isPending || (publishMode === "schedule" && !scheduleDate)}
+                disabled={submitting || publishMutation.isPending || (publishMode === "schedule" && !scheduleDate)}
                 className="px-6 rounded-lg font-bold"
                 icon={publishMode === "schedule" ? <CalendarClock className="w-4 h-4" /> : <Send className="w-4 h-4" />}
               >
-                {publishMutation.isPending
+                {submitting || publishMutation.isPending
                   ? (publishMode === "schedule" ? "Scheduling..." : "Posting...")
                   : publishMode === "schedule" ? `Schedule (${preparedRows.length})` : `Post Now (${preparedRows.length})`}
               </Button>

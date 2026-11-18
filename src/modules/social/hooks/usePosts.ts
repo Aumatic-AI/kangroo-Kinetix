@@ -177,15 +177,28 @@ export function useCancelSchedule() {
   });
 }
 
-/** Deletes post rows from our own DB only — this never calls Upload-Post
- * or any platform API, so a post already live on a platform stays live;
- * this just removes our tracking record of it (matches Meta Ads' Ad
- * Library delete, which only ever touches meta_ad_creatives + our own
- * storage, never Meta itself). */
+/** Deletes post rows from our own DB. A post already live on a platform stays
+ * live; this only removes our record of it. A SCHEDULED post is cancelled on
+ * Upload-Post first, and nothing is deleted if that fails — otherwise Upload-Post
+ * would still publish it with no record left here. A post that is mid-publish
+ * can't be deleted. */
 export function useDeletePosts() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (socialPostIds: string[]) => {
+      const { data: rows, error: readErr } = await supabase.from("social_posts").select("id, status").in("id", socialPostIds);
+      if (readErr) throw readErr;
+      if ((rows ?? []).some((r) => r.status === "publishing")) {
+        throw new Error("A post that is still publishing can't be deleted. Wait for it to finish.");
+      }
+      const scheduled = (rows ?? []).filter((r) => r.status === "scheduled").map((r) => r.id);
+      if (scheduled.length) {
+        const res = await fetch("/api/social/posts/cancel-schedule", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ socialPostIds: scheduled }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Couldn't cancel the scheduled post, so nothing was deleted.");
+      }
       const { error } = await supabase.from("social_posts").delete().in("id", socialPostIds);
       if (error) throw error;
     },

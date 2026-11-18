@@ -10,8 +10,10 @@ import { env } from "@/config/env";
 import type { WordPressPostSummary } from "@/services/content-automation/blog-wordpress";
 
 export class WordPressError extends Error {
-  constructor(message: string, readonly status: number | null) {
+  readonly status: number | null;   // plain field: Node's type stripping can't run parameter properties
+  constructor(message: string, status: number | null) {
     super(message);
+    this.status = status;
     this.name = "WordPressError";
   }
 }

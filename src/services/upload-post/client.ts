@@ -25,8 +25,12 @@ function authHeader(): Record<string, string> {
  * A plain `fetch` rejection (network drop / timeout) is NOT this class: the
  * request may or may not have landed. */
 export class UploadPostHttpError extends Error {
-  constructor(message: string, readonly status: number) {
+  // A plain field, not a `readonly status` constructor parameter: Node's type stripping
+  // (used by scripts/tests) can't run parameter properties.
+  readonly status: number;
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
     this.name = "UploadPostHttpError";
   }
 }

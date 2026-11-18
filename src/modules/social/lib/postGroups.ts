@@ -1,4 +1,4 @@
-import { Platform } from "./platforms";
+import type { Platform } from "./platforms";
 
 export interface PostRow {
   id: string;
@@ -104,4 +104,25 @@ export function groupState(group: PostGroup): GroupState {
   if (group.rows.some((r) => r.status === "scheduled")) return "scheduled";
   if (group.rows.some((r) => r.status === "draft")) return "draft";
   return "published";
+}
+
+/** The Posts page's status tabs. Kept in the URL as `?status=` (absent = all). */
+export const STATUS_FILTERS = ["all", "drafts", "scheduled", "published", "failed"] as const;
+export type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+export function parseStatusFilter(value: string | null | undefined): StatusFilter {
+  return (STATUS_FILTERS as readonly string[]).includes(value ?? "") ? (value as StatusFilter) : "all";
+}
+
+/**
+ * Whether a post (a group of per-platform rows) belongs under a tab. Each tab
+ * matches ANY platform in that state, so a post that went out on two platforms
+ * and failed on a third shows under both Published and Failed — nothing is
+ * hidden behind the group's single overall state. Posts still generating or
+ * publishing appear under All (with their badge).
+ */
+export function matchesStatusFilter(group: PostGroup, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const status = { drafts: "draft", scheduled: "scheduled", published: "published", failed: "failed" }[filter];
+  return group.rows.some((r) => r.status === status);
 }

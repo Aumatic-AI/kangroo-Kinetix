@@ -36,12 +36,16 @@ export const socialScheduledPostCheck = inngest.createFunction(
     const MAX_ATTEMPTS = 10; // 30s apart => up to 5 minutes of checking after the due time
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const resolved = await step.run(`check-${attempt}`, async () => {
-        const { data: post } = await supabase.from("social_posts").select("status, property_content_id").eq("id", socialPostId).single();
+        const { data: post } = await supabase.from("social_posts")
+          .select("status, property_content_id, upload_post_job_id, upload_post_request_id").eq("id", socialPostId).single();
         if (!post || (post.status !== "scheduled" && post.status !== "publishing")) {
           return true; // already resolved, cancelled, or retried elsewhere — nothing left to do
         }
         // Automation posts are reconciled by the content-automation worker, never here.
         if (post.property_content_id !== null) return true;
+        // A check for an EARLIER schedule of this post (cancelled, then rescheduled with a new job)
+        // must not judge the new one by the old, cancelled job.
+        if ((jobId && post.upload_post_job_id !== jobId) || (!jobId && requestId && post.upload_post_request_id !== requestId)) return true;
 
         const status = jobId
           ? await UploadPostService.getUploadStatus({ jobId })
@@ -67,6 +71,13 @@ export const socialScheduledPostCheck = inngest.createFunction(
       if (attempt < MAX_ATTEMPTS - 1) await step.sleep(`wait-${attempt}`, "30s");
     }
 
+    // Still not final after 5 minutes of checking. Don't leave it silent: say so on the post (the
+    // Dashboard lists Social posts stuck publishing or unconfirmed after their time).
+    await step.run("record-timeout", async () => {
+      await supabase.from("social_posts")
+        .update({ error_message: "Upload-Post hadn't confirmed this post 5 minutes after its time. Check the account before doing anything else." })
+        .eq("id", socialPostId).in("status", ["scheduled", "publishing"]).is("property_content_id", null);
+    });
     return { socialPostId, resolved: false, timedOut: true };
   }
 );

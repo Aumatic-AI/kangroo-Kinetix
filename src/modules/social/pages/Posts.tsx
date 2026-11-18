@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,10 +12,17 @@ import { CreatePostModal } from "../components/posts/CreatePostModal";
 import { PostTile } from "../components/posts/PostTile";
 import { PostDetailsModal } from "../components/posts/PostDetailsModal";
 import { useSocialPosts, useRetryPosts, useCancelSchedule, useDeletePosts, socialKeys } from "../hooks/usePosts";
-import { groupPosts, distributeIntoColumns, groupState, PostGroup, PostRow } from "../lib/postGroups";
+import { groupPosts, distributeIntoColumns, matchesStatusFilter, parseStatusFilter, STATUS_FILTERS, PostGroup, PostRow, type StatusFilter } from "../lib/postGroups";
 import { useQueryClient } from "@tanstack/react-query";
 
-type StatusFilter = "all" | "published" | "scheduled";
+const TAB_LABEL: Record<StatusFilter, string> = { all: "All", drafts: "Drafts", scheduled: "Scheduled", published: "Published", failed: "Failed" };
+const EMPTY_MESSAGE: Record<StatusFilter, string> = {
+  all: "No posts match this filter.",
+  drafts: "No drafts.",
+  scheduled: "No scheduled posts.",
+  published: "No published posts yet.",
+  failed: "No failed posts.",
+};
 
 // Masonry grid, up to 5 columns of small tiles — a viewport shows well
 // more than 10 without scrolling, so the dense page size applies here.
@@ -44,23 +51,27 @@ function useColumnCount() {
   return count;
 }
 
-interface PostsProps {
-  heading?: string;
-  description?: string;
-  /** Which status pill is active on load — the Gallery page defaults to
-   * "all", the Published page defaults to "published". Either page can
-   * still pivot to any of the three from the pills, so this only sets the
-   * starting point, not a hard restriction. */
-  defaultFilter?: StatusFilter;
-}
-
-export function Posts({ heading = "Gallery", description = "Create once, publish everywhere your accounts are connected.", defaultFilter = "all" }: PostsProps) {
+/**
+ * The one Social posts page (the former separate "Published" page was the same
+ * screen on another tab; `/social/published` now redirects to `?status=published`).
+ * The status tab lives in the URL (`?status=drafts|scheduled|published|failed`), so it
+ * survives a refresh and the Dashboard can link straight to, e.g., failed posts.
+ */
+export function Posts() {
   const { data: rows = [], isLoading } = useSocialPosts();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const filter = parseStatusFilter(searchParams.get("status"));
+  const setFilter = (next: StatusFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("status"); else params.set("status", next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailsTarget, setDetailsTarget] = useState<PostGroup | null>(null);
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState<StatusFilter>(defaultFilter);
   const queryClient = useQueryClient();
   const retryMutation = useRetryPosts();
   const cancelScheduleMutation = useCancelSchedule();
@@ -68,33 +79,25 @@ export function Posts({ heading = "Gallery", description = "Create once, publish
   const columnCount = useColumnCount();
 
   const groups = useMemo(() => groupPosts(rows as PostRow[]), [rows]);
-  const publishedCount = useMemo(() => groups.filter((g) => groupState(g) === "published").length, [groups]);
-  const scheduledCount = useMemo(() => groups.filter((g) => groupState(g) === "scheduled").length, [groups]);
-  const filteredGroups = useMemo(
-    () => (filter === "all" ? groups : groups.filter((g) => groupState(g) === filter)),
-    [groups, filter]
+  const counts = useMemo(
+    () => Object.fromEntries(STATUS_FILTERS.map((f) => [f, groups.filter((g) => matchesStatusFilter(g, f)).length])) as Record<StatusFilter, number>,
+    [groups]
   );
+  const filteredGroups = useMemo(() => groups.filter((g) => matchesStatusFilter(g, filter)), [groups, filter]);
   const { totalPages } = paginationMeta(filteredGroups.length, page, PAGE_SIZE);
   const pagedGroups = useMemo(() => paginateArray(filteredGroups, page, PAGE_SIZE), [filteredGroups, page]);
   const columns = useMemo(() => distributeIntoColumns(pagedGroups, columnCount), [pagedGroups, columnCount]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: socialKeys.posts() });
 
-  const emptyMessage =
-    groups.length === 0
-      ? "No posts yet — create your first one."
-      : filter === "published"
-      ? "No published posts yet."
-      : filter === "scheduled"
-      ? "No scheduled posts."
-      : "No posts match this filter.";
+  const emptyMessage = groups.length === 0 ? "No posts yet — create your first one." : EMPTY_MESSAGE[filter];
 
   return (
     <div className="space-y-6 pb-10">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-text">{heading}</h2>
-          <p className="text-sm text-muted mt-1">{description}</p>
+          <h2 className="text-2xl font-bold text-text">Posts</h2>
+          <p className="text-sm text-muted mt-1">Create once, publish everywhere your accounts are connected. Drafts, scheduled, published and failed posts, all in one place.</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} icon={<Plus className="w-4 h-4" />}>
           Create Post
@@ -104,11 +107,7 @@ export function Posts({ heading = "Gallery", description = "Create once, publish
       <TabSwitch
         value={filter}
         onValueChange={(v) => { setFilter(v as StatusFilter); setPage(1); }}
-        items={[
-          { value: "all", label: "All", count: groups.length },
-          { value: "published", label: "Published", count: publishedCount },
-          { value: "scheduled", label: "Scheduled", count: scheduledCount },
-        ]}
+        items={STATUS_FILTERS.map((f) => ({ value: f, label: TAB_LABEL[f], count: counts[f] }))}
       />
 
       {isLoading ? (

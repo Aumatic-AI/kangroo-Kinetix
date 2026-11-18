@@ -1,5 +1,7 @@
-import { Posts } from "@/modules/social/pages/Posts";
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/config/routes";
 
+/** "Published" was the Posts page on another tab; old links and bookmarks land on that tab. */
 export default function Page() {
-  return <Posts heading="Published" description="Everything that's live on your connected accounts." defaultFilter="published" />;
+  redirect(`${ROUTES.SOCIAL.POSTS}?status=published`);
 }
