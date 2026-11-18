@@ -24,7 +24,10 @@ interface SocialDashboardResponse {
   audienceDemographics: { age: Record<string, number>; gender: Record<string, number> } | null;
 }
 
-const EMPTY: SocialDashboardResponse = {
+/** A fresh empty response per request. Never a shared module-level object: the
+ * route pushes into these arrays, and a warm serverless instance would keep
+ * appending to the same array on every load (duplicated platform cards). */
+const emptyResponse = (): SocialDashboardResponse => ({
   kpis: { totalFollowers: null, totalImpressions: null, totalEngagement: null, totalReach: null, connectedAccounts: 0 },
   impressionsTrend: [],
   impressionsByPlatform: [],
@@ -32,7 +35,7 @@ const EMPTY: SocialDashboardResponse = {
   engagementBreakdown: [],
   platformHealth: SUPPORTED_UPLOAD_POST_PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   audienceDemographics: null,
-};
+});
 
 function engagementOf(m: { likes?: number; comments?: number; shares?: number; saves?: number }): number {
   return (m.likes || 0) + (m.comments || 0) + (m.shares || 0) + (m.saves || 0);
@@ -52,7 +55,7 @@ export async function GET() {
   try {
     const supabase = (await createClient()) as SupabaseClient<Database>;
     const businessId = await getFirstBusinessId(supabase);
-    if (!businessId) return NextResponse.json(EMPTY);
+    if (!businessId) return NextResponse.json(emptyResponse());
 
     const { data: connectionRows } = await supabase.from("platform_connections").select("platform, status").eq("business_id", businessId);
 
@@ -65,7 +68,9 @@ export async function GET() {
     const connectedPlatforms = platformHealth.filter((p) => p.status === "connected").map((p) => p.platform);
     const connectedAccounts = connectedPlatforms.length;
 
-    const response: SocialDashboardResponse = { ...EMPTY, kpis: { ...EMPTY.kpis, connectedAccounts }, platformHealth };
+    const response = emptyResponse();
+    response.kpis.connectedAccounts = connectedAccounts;
+    response.platformHealth = platformHealth;
 
     const username = env.UPLOAD_POST_PROFILE;
     if (!username || connectedPlatforms.length === 0) {
@@ -140,8 +145,8 @@ export async function GET() {
     }
 
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[SOCIAL_DASHBOARD]", error);
-    return NextResponse.json({ error: error.message || "Failed to load dashboard" }, { status: 500 });
+    return NextResponse.json({ error: (error instanceof Error && error.message) || "Failed to load dashboard" }, { status: 500 });
   }
 }
