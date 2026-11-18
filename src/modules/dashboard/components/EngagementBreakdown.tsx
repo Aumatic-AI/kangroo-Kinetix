@@ -1,7 +1,9 @@
 import { Heart } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { ACCENT, CHART_SERIES, CHART_TOOLTIP_STYLE, SectionTitle, Card, EmptyState } from "@/components/global/DashboardKit";
-import { SocialDashboardData } from "../../hooks/useDashboard";
+import type { DashboardData } from "../types";
+
+type SocialDashboardData = DashboardData["analytics"];
 
 const TYPE_LABEL: Record<string, string> = { likes: "Likes", comments: "Comments", shares: "Shares", saves: "Saves" };
 

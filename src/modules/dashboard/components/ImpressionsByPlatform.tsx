@@ -1,18 +1,20 @@
 import { Eye } from "lucide-react";
 import { ACCENT, SectionTitle, Card, EmptyState } from "@/components/global/DashboardKit";
-import { platformMeta, formatFollowerCount } from "../../lib/platforms";
-import { SocialDashboardData } from "../../hooks/useDashboard";
+import { platformMeta, formatFollowerCount } from "@/modules/social/lib/platforms";
+import type { DashboardData } from "../types";
+
+type SocialDashboardData = DashboardData["analytics"];
 
 /** Same proportional-bar treatment as the Platforms card, one metric —
  * which platform is actually driving your impressions, from the same
  * total-impressions call that already powers the trend chart above. */
-export function ImpressionsByPlatform({ data }: { data: SocialDashboardData["impressionsByPlatform"] | undefined }) {
+export function ImpressionsByPlatform({ data, rangeLabel }: { data: SocialDashboardData["impressionsByPlatform"] | undefined; rangeLabel: string }) {
   const sorted = [...(data || [])].filter((d) => d.impressions > 0);
   const max = Math.max(...sorted.map((d) => d.impressions), 1);
 
   return (
     <Card>
-      <SectionTitle icon={Eye} accent={ACCENT.blue} title="Impressions by Platform" />
+      <SectionTitle icon={Eye} accent={ACCENT.blue} title="Impressions by Platform" trailing={<span className="text-xs text-muted">last {rangeLabel}</span>} />
       {!sorted.length ? (
         <EmptyState message="No impressions yet." />
       ) : (
@@ -38,6 +40,9 @@ export function ImpressionsByPlatform({ data }: { data: SocialDashboardData["imp
               </div>
             );
           })}
+          {sorted.some((d) => d.platform === "facebook") && (
+            <p className="text-xs text-muted">Facebook reports a rolling 30-day figure each day, so over a range its total is overstated (Upload-Post&apos;s own caveat).</p>
+          )}
         </div>
       )}
     </Card>

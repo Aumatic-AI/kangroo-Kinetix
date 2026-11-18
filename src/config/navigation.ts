@@ -1,13 +1,11 @@
 import {
   LayoutDashboard,
   Megaphone,
-  Send,
   Settings,
   Link,
   Building2,
   Images,
   SlidersHorizontal,
-  BarChart3,
 } from "lucide-react";
 import { NavItem, NavSection } from "@/types";
 import { ROUTES } from "./routes";
@@ -39,8 +37,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Social",
     items: [
       { id: "posts", label: "Posts", href: ROUTES.SOCIAL.POSTS, icon: Megaphone },
-      { id: "published", label: "Published", href: ROUTES.SOCIAL.PUBLISHED, icon: Send },
-      { id: "social-analytics", label: "Social Analytics", href: ROUTES.SOCIAL.DASHBOARD, icon: BarChart3 },
       { id: "connected-accounts", label: "Connected Accounts", href: ROUTES.SOCIAL.CONNECTED_ACCOUNTS, icon: Link },
     ],
   },

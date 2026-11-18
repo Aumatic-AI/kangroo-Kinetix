@@ -1,7 +1,9 @@
 import { BarChart3 } from "lucide-react";
 import { ACCENT, SectionTitle, Card, EmptyState } from "@/components/global/DashboardKit";
-import { platformMeta, formatFollowerCount } from "../../lib/platforms";
-import { SocialDashboardData } from "../../hooks/useDashboard";
+import { platformMeta, formatFollowerCount } from "@/modules/social/lib/platforms";
+import type { DashboardData } from "../types";
+
+type SocialDashboardData = DashboardData["analytics"];
 
 /** One proportional bar per platform (followers — the one number everyone
  * intuitively understands), with reach/engagement alongside as plain

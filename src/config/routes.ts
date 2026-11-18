@@ -6,11 +6,9 @@ export const ROUTES = {
     HOME: "/dashboard",
   },
   SOCIAL: {
-    DASHBOARD: "/social",
     CONNECTED_ACCOUNTS: "/social/connected-accounts",
     POSTS: "/social/posts",
     POSTS_PUBLISH: "/social/posts/publish",
-    PUBLISHED: "/social/published",
   },
   CONTENT: {
     GALLERY: "/content",

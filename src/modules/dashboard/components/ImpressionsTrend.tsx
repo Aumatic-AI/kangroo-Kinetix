@@ -1,19 +1,21 @@
 import { TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ACCENT, CHART_TOOLTIP_STYLE, SectionTitle, Card, EmptyState, chartTickInterval } from "@/components/global/DashboardKit";
-import { SocialDashboardData } from "../../hooks/useDashboard";
+import type { DashboardData } from "../types";
+
+type SocialDashboardData = DashboardData["analytics"];
 
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function ImpressionsTrend({ data }: { data: SocialDashboardData["impressionsTrend"] }) {
+export function ImpressionsTrend({ data, rangeLabel }: { data: SocialDashboardData["impressionsTrend"]; rangeLabel: string }) {
   const hasData = data.some((d) => d.impressions > 0);
   const tickInterval = chartTickInterval(data.length);
 
   return (
     <Card>
-      <SectionTitle icon={TrendingUp} accent={ACCENT.blue} title="Impressions" />
+      <SectionTitle icon={TrendingUp} accent={ACCENT.blue} title="Impressions" trailing={<span className="text-xs text-muted">last {rangeLabel}</span>} />
       {!hasData ? (
         <EmptyState message="No impressions yet — connect an account and publish to start seeing real data here." />
       ) : (

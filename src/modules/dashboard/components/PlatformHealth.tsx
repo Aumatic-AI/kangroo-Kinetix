@@ -1,7 +1,9 @@
 import { Link2 } from "lucide-react";
 import { ACCENT, SectionTitle, Card } from "@/components/global/DashboardKit";
-import { platformMeta } from "../../lib/platforms";
-import { SocialDashboardData } from "../../hooks/useDashboard";
+import { platformMeta } from "@/modules/social/lib/platforms";
+import type { DashboardData } from "../types";
+
+type SocialDashboardData = DashboardData["analytics"];
 
 const STATUS_STYLE: Record<string, { label: string; className: string }> = {
   connected: { label: "Connected", className: "text-success bg-success-bg" },

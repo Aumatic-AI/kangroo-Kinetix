@@ -8,7 +8,7 @@ import { findActiveHref } from "../../src/config/nav-active.ts";
 
 const HREFS = [
   "/dashboard", "/content", "/listings", "/content/automation",
-  "/social/posts", "/social/published", "/social", "/social/connected-accounts", "/settings",
+  "/social/posts", "/social/connected-accounts", "/settings",
 ];
 
 test("exact matches", () => {
@@ -18,14 +18,15 @@ test("exact matches", () => {
 test("the most specific href wins over its parent", () => {
   assert.equal(findActiveHref("/social/posts", HREFS), "/social/posts");
   assert.equal(findActiveHref("/content/automation", HREFS), "/content/automation");
-  assert.equal(findActiveHref("/social", HREFS), "/social");
+  assert.equal(findActiveHref("/social/connected-accounts", HREFS), "/social/connected-accounts");
   assert.equal(findActiveHref("/content", HREFS), "/content");
 });
 
 test("detail routes keep their page highlighted", () => {
   assert.equal(findActiveHref("/social/posts/publish", HREFS), "/social/posts");
   assert.equal(findActiveHref("/listings/123", HREFS), "/listings");
-  assert.equal(findActiveHref("/social/unknown-tab", HREFS), "/social");
+  // No "/social" page any more (Social Analytics was merged into the Dashboard): nothing to highlight.
+  assert.equal(findActiveHref("/social/unknown-tab", HREFS), null);
 });
 
 test("no false prefix matches and trailing slashes are ignored", () => {
