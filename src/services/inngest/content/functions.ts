@@ -4,6 +4,7 @@ import { supabase, rpc, isPermanentError, cleanErrorMessage } from "./shared";
 import { addDays, mondayOf } from "@/services/content-automation/schedule";
 import { planCycleWeek } from "@/services/content-automation/plan-week";
 import { kickBlogPublication } from "./publish-blog";
+import { kickSocialPublishing } from "./publish-social";
 
 /**
  * Content-automation generation functions.
@@ -12,20 +13,31 @@ import { kickBlogPublication } from "./publish-blog";
  * content_automation_settings.auto_run_enabled (default false) — so during the
  * testing phase generation only starts from the manual "Generate now" button
  * (POST /api/content/trigger → content/process-queue) or a gallery regenerate.
- * No function here publishes. Output reaches the gallery tables; a LIVE blog additionally
- * gets a blog_publications row (DB trigger) and kickBlogPublication hands it to
- * publish-blog.ts. Testing content never leaves the gallery.
+ * No function here publishes. Output reaches the gallery tables; LIVE content is then
+ * handed on: a blog to publish-blog.ts (its blog_publications row comes from a DB
+ * trigger), a social/LinkedIn creative to publish-social.ts (one scheduled post per
+ * platform). Testing content never leaves the gallery.
  */
 
 /** Claims pending queue jobs (only while automation is enabled and the cycle's
  * environment matches the current mode — enforced inside claim_generation_jobs)
  * and fans each out to its own durable generate-job run. */
+/** content-generate-job's concurrency; the queue never claims more than this many at once. */
+const GENERATION_CONCURRENCY = 3;
+
 export const processContentQueue = inngest.createFunction(
   { id: "content-process-queue", triggers: [{ event: "content/process-queue" }], concurrency: { limit: 1 }, retries: 2 },
   async ({ event, step }) => {
     const worker = `inngest-${event.id ?? Date.now()}`;
     const jobs = (await step.run("claim", async () => {
-      const claimed = await rpc<{ id: string }[] | null>("claim_generation_jobs", { p_worker: worker, p_limit: 5 });
+      // Claim only what can start now. Claimed-but-waiting jobs burn their 15-minute lease in
+      // Inngest's queue, then get taken over (and their images paid for again) — see
+      // GENERATION_CONCURRENCY, which must match content-generate-job's concurrency limit.
+      const { count: inFlight } = await supabase.from("content_generation_queue").select("id", { count: "exact", head: true })
+        .eq("generation_status", "processing").gt("locked_until", new Date().toISOString());
+      const limit = GENERATION_CONCURRENCY - (inFlight ?? 0);
+      if (limit <= 0) return [];
+      const claimed = await rpc<{ id: string }[] | null>("claim_generation_jobs", { p_worker: worker, p_limit: limit });
       return (claimed ?? []).map((j) => ({ id: j.id }));
     })) as { id: string }[];
     if (!jobs.length) return { claimed: 0 };
@@ -35,7 +47,7 @@ export const processContentQueue = inngest.createFunction(
 );
 
 export const generateContentJob = inngest.createFunction(
-  { id: "content-generate-job", triggers: [{ event: "content/generate-job" }], concurrency: { limit: 3 }, retries: 2 },
+  { id: "content-generate-job", triggers: [{ event: "content/generate-job" }], concurrency: { limit: GENERATION_CONCURRENCY }, retries: 2 },
   async ({ event, step }) => {
     const { queueId, worker } = event.data as { queueId: string; worker: string };
 
@@ -58,8 +70,12 @@ export const generateContentJob = inngest.createFunction(
         forceType: job.pipeline_type === "social" && (job.content_type === "image" || job.content_type === "video") ? job.content_type : null,
       });
       await step.run("complete-job", () => rpc("complete_generation_job", { p_queue: queueId, p_worker: worker }));
-      // A Live blog is published to WordPress as soon as it is generated (never in Testing).
-      if (job.pipeline_type === "blog" && job.environment === "live") await kickBlogPublication(step, result.contentId);
+      // Live only (never Testing): a blog is queued for WordPress, and a social/LinkedIn creative gets
+      // one post per platform, each timed for its AI-proposed time.
+      if (job.environment === "live") {
+        if (job.pipeline_type === "blog") await kickBlogPublication(step, result.contentId);
+        else await kickSocialPublishing(step, result.contentId);
+      }
       await step.sendEvent("next-batch", { name: "content/process-queue", data: {} });
       return { status: "completed", ...result };
     } catch (e) {
@@ -111,8 +127,11 @@ export const regenerateContentRevision = inngest.createFunction(
         cycleId: ctx.cycle_id, environment: ctx.environment as "testing" | "live", contentId, revisionId, guidance: ctx.guidance,
         forceType: ctx.pipeline_type === "social" ? (ctx.content_type as "image" | "video") : null,
       });
-      // A Live blog that failed before it was ever published can be regenerated; publish it now.
-      if (ctx.pipeline_type === "blog" && ctx.environment === "live") await kickBlogPublication(step, contentId);
+      // Live content can only be regenerated before it has publishing records, so publish/schedule it now.
+      if (ctx.environment === "live") {
+        if (ctx.pipeline_type === "blog") await kickBlogPublication(step, contentId);
+        else await kickSocialPublishing(step, contentId);
+      }
       return { status: "completed", ...result };
     } catch (e) {
       const message = cleanErrorMessage(e);
@@ -168,7 +187,7 @@ export const weeklyContentCycle = inngest.createFunction(
     for (const c of created) {
       await step.run(`plan-week-${c.cycleId}`, async () => {
         try { return await planCycleWeek(supabase, c.cycleId); }
-        catch (e) { console.error("[CONTENT_PLAN]", e instanceof Error ? e.message : e); return { social: 0, linkedin: 0, failed: true }; }
+        catch (e) { console.error("[CONTENT_PLAN]", e instanceof Error ? e.message : e); return { social: 0, linkedin: 0, blog: 0, failed: true }; }
       });
     }
     if (created.length) await step.sendEvent("kick", { name: "content/process-queue", data: {} });

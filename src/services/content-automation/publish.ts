@@ -154,6 +154,16 @@ export async function publishClaimedPost(deps: PublishDeps, post: SocialPostRow)
     return { postId: post.id, outcome: "failed", status, detail: "linkedin video" };
   }
 
+  // Page targets. Without a page id Upload-Post posts LinkedIn to the personal profile of whoever
+  // connected the account (and Facebook fails), so an automation post is never sent without one.
+  // The ids come from Connected Accounts → Sync; a failed page lookup there leaves them out.
+  const pageMeta = payload.connection_metadata ?? {};
+  if ((payload.platform === "facebook" && !pageMeta.facebookPageId) || (payload.platform === "linkedin" && !pageMeta.linkedinPageId)) {
+    const page = payload.platform === "facebook" ? "Facebook Page" : "LinkedIn Page";
+    const status = await finish("failed", { error: `no ${page} selected for this account — sync Connected Accounts, then retry`, retryable: false });
+    return { postId: post.id, outcome: "failed", status, detail: "no page id" };
+  }
+
   // 3. Live connection health on Upload-Post's side (the DB row only says what we last synced).
   try {
     const profile = await deps.uploadPost.getProfile(deps.profile);

@@ -27,11 +27,23 @@ export interface WeekPlan {
   planned_at: string;
   social: PlannedPost[];
   linkedin: PlannedPost[];
+  /** Blog publish times (platform "blog"). Absent on plans made before blogs were scheduled. */
+  blog?: PlannedPost[];
 }
 
 export const POSTING_HOURS = { earliest: "08:00", latest: "21:30" } as const;
 /** Minimum gap between two posts on the SAME platform (spec §4.3: avoid clustering). */
 export const MIN_SAME_PLATFORM_GAP_MS = 20 * 3_600_000;
+
+/**
+ * The same-platform gap for a given number of posts per platform per week. Up to 7
+ * a week, one a day with a 20 h gap. Above 7 (frequencies go up to 14), two posts on
+ * some days are unavoidable, so the gap drops to 5 h — still inside posting hours
+ * (08:00–21:30), and the second time of day in SECOND_TIME keeps them apart.
+ */
+export function minSamePlatformGapMs(postsPerWeek: number): number {
+  return postsPerWeek > 7 ? 5 * 3_600_000 : MIN_SAME_PLATFORM_GAP_MS;
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -81,7 +93,12 @@ const FALLBACK: Record<string, { dayOffsets: number[]; time: string }> = {
   facebook: { dayOffsets: [2, 4, 6, 1, 3, 5, 0], time: "12:30" },
   tiktok: { dayOffsets: [3, 5, 1, 6, 0, 2, 4], time: "20:00" },
   linkedin: { dayOffsets: [1, 2, 3, 4, 0], time: "09:30" },
+  // A blog's one "platform" is its WordPress publish time: weekday late mornings, Tue/Thu first.
+  blog: { dayOffsets: [1, 3, 2, 0, 4, 5, 6], time: "10:00" },
 };
+
+/** A second default time of day per platform, ≥5 h from the first, for weeks with more than 7 posts. */
+const SECOND_TIME: Record<string, string> = { instagram: "12:00", facebook: "18:30", tiktok: "13:00", linkedin: "15:00", blog: "15:00" };
 
 interface RawSlot { platform?: unknown; date?: unknown; time?: unknown; reason?: unknown }
 
@@ -98,7 +115,13 @@ export function validateProposedSchedule(args: {
   raw: unknown;
   /** Slots already proposed for other creatives this week (UTC ms per platform). */
   taken: { platform: string; ms: number }[];
+  /** Same-platform spacing; default 20 h. See minSamePlatformGapMs. */
+  minGapMs?: number;
+  /** No slot earlier than this (UTC ms) — e.g. "Generate now" in Live, scheduling in the current week. */
+  notBeforeMs?: number;
 }): ProposedSlot[] {
+  const gap = args.minGapMs ?? MIN_SAME_PLATFORM_GAP_MS;
+  const notBefore = args.notBeforeMs ?? -Infinity;
   const tz = isValidTimezone(args.timezone) ? args.timezone : "America/Toronto";
   const maybeSlots = (args.raw as { slots?: unknown } | null | undefined)?.slots;
   const rawSlots: RawSlot[] = Array.isArray(maybeSlots) ? (maybeSlots as RawSlot[]) : [];
@@ -123,17 +146,24 @@ export function validateProposedSchedule(args: {
     }
 
     const fb = FALLBACK[platform] ?? FALLBACK.instagram;
-    const conflicts = (ms: number) => taken.some((t) => t.platform === platform && Math.abs(t.ms - ms) < MIN_SAME_PLATFORM_GAP_MS);
+    const conflicts = (ms: number) => ms < notBefore || taken.some((t) => t.platform === platform && Math.abs(t.ms - ms) < gap);
 
     let ms = date && time ? zonedLocalToUtcMs(date, time, tz) : NaN;
     if (Number.isNaN(ms) || conflicts(ms)) {
       adjusted = true;
-      time = date && time && !conflicts(ms) ? time : fb.time;
-      // try the AI's date first (if valid and only the gap conflicted), then fallback days
+      // Try the AI's date first (if valid and only the gap conflicted), then fallback days — at the
+      // AI's time, then the platform's default time, then its second time of day (only reachable
+      // when the gap allows two posts a day). The first free (day, time) wins.
       const candidates = [...(date ? [date] : []), ...fb.dayOffsets.map((o) => weekDates[o]), ...weekDates];
-      const found = candidates.find((d) => !conflicts(zonedLocalToUtcMs(d, time!, tz)));
-      date = found ?? candidates[0];
-      ms = zonedLocalToUtcMs(date, time!, tz);
+      const times = [...new Set([...(time ? [time] : []), fb.time, SECOND_TIME[platform] ?? "12:00"])];
+      let found: { d: string; t: string } | null = null;
+      for (const t of times) {
+        const d = candidates.find((c) => !conflicts(zonedLocalToUtcMs(c, t, tz)));
+        if (d) { found = { d, t }; break; }
+      }
+      date = found?.d ?? candidates[0];
+      time = found?.t ?? fb.time;
+      ms = zonedLocalToUtcMs(date, time, tz);
       if (!reason) reason = "default slot (AI proposal unavailable or clustered)";
     }
 
@@ -148,6 +178,17 @@ export function validateProposedSchedule(args: {
     });
   }
   return out;
+}
+
+/**
+ * The 7-day window a creative is scheduled in, as its first date: the cycle's week, or —
+ * when that week has already started (Live "Generate now" adds to the current week) — the
+ * 7 days from today, so no slot is proposed in the past. `notBeforeMs` keeps today's
+ * earlier hours out too.
+ */
+export function schedulingWindow(weekStart: string, nowMs: number, tz: string): { start: string; notBeforeMs: number } {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: isValidTimezone(tz) ? tz : "America/Toronto" }).format(new Date(nowMs));
+  return { start: today > weekStart ? today : weekStart, notBeforeMs: nowMs + 30 * 60_000 };
 }
 
 /** Week (Monday start) in which a UTC instant falls, as the cycle's week_start. */
@@ -175,6 +216,7 @@ export function validateWeekPlan(args: {
   existing?: PlannedPost[];
 }): PlannedPost[] {
   const have = new Set((args.existing ?? []).map((p) => p.slot_index));
+  const minGapMs = minSamePlatformGapMs(args.count);
   const taken: { platform: string; ms: number }[] = [];
   for (const p of args.existing ?? []) for (const s of p.slots) taken.push({ platform: s.platform, ms: Date.parse(s.scheduled_at) });
 
@@ -187,10 +229,23 @@ export function validateWeekPlan(args: {
     const ai = posts.find((p) => p && typeof p === "object" && Number(p.slot_index) === i);
     const slots = validateProposedSchedule({
       weekStart: args.weekStart, timezone: args.timezone, platforms: args.platforms,
-      raw: { slots: Array.isArray(ai?.slots) ? ai!.slots : [] }, taken,
+      raw: { slots: Array.isArray(ai?.slots) ? ai!.slots : [] }, taken, minGapMs,
     }).map((s) => ({ ...s, source: "week_plan" as const }));
     for (const s of slots) taken.push({ platform: s.platform, ms: Date.parse(s.scheduled_at) });
     out.push({ slot_index: i, slots });
   }
   return out;
+}
+
+/**
+ * The next weekly run (Friday 18:00 in `tz`, the cron in weeklyContentCycle) after `nowMs`, as UTC ms.
+ * Display only — the cron itself is `TZ=America/Toronto 0 18 * * 5`.
+ */
+export function nextWeeklyRunMs(nowMs: number, tz = "America/Toronto"): number {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(nowMs));   // YYYY-MM-DD
+  const dow = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;                            // Mon=0 … Fri=4
+  for (let add = (4 - dow + 7) % 7; ; add += 7) {
+    const at = zonedLocalToUtcMs(addDays(today, add), "18:00", tz);
+    if (at > nowMs) return at;
+  }
 }

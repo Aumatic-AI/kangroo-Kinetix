@@ -360,19 +360,29 @@ Rules for the JSON: write 6–10 substantial paragraphs of 60–120 words each (
   return { system, user };
 }
 
+/** When each pipeline's audience is around — the hint both scheduling prompts give the AI. */
+const TIMING_HINT: Record<"social" | "linkedin" | "blog", { one: string; week: string }> = {
+  linkedin: { one: "LinkedIn: weekday business hours work best (Tue–Thu mornings are typical).", week: "LinkedIn: weekday business hours (Tue–Thu mornings are typical); never weekends." },
+  social: { one: "Social: evenings and weekends tend to perform for entertainment content; avoid the very early morning.", week: "Social (entertaining content): evenings and weekends tend to perform; avoid early morning." },
+  blog: {
+    one: "Blog (an informational article published on the company blog, then found through search and shared links): weekday mornings to early afternoon tend to get readers (Tue–Thu 09:00–13:00 is typical); avoid late evening.",
+    week: "Blog (informational articles on the company blog): weekday mornings to early afternoon (Tue–Thu 09:00–13:00 is typical); spread articles across different weekdays; avoid weekends unless there are more articles than weekdays.",
+  },
+};
+
 export function getSchedulePrompt(args: {
   weekStart: string;            // YYYY-MM-DD (Monday)
   timezone: string;
-  pipeline: "social" | "linkedin";
+  pipeline: "social" | "linkedin" | "blog";
   platforms: string[];
-  contentType: "image" | "video" | "text_image";
+  contentType: string;
   city: string | null;
   existing: { platform: string; local: string }[];   // already-proposed slots this week
 }) {
-  const system = `You choose when a social post should go out. You propose a day and local time per platform for the given week. These are reasoned guesses from general posting patterns, not guaranteed optimal. Respond with a single valid JSON object only.`;
-  const user = `Week starts Monday ${args.weekStart} (7 days: Mon–Sun). All times are LOCAL in the timezone ${args.timezone}${args.city ? ` (property city: ${args.city})` : ""}.
+  const system = `You choose when a ${args.pipeline === "blog" ? "blog article should be published" : "social post should go out"}. You propose a day and local time per platform for the given week. These are reasoned guesses from general posting patterns, not guaranteed optimal. Respond with a single valid JSON object only.`;
+  const user = `Schedule within the 7 days starting ${new Date(`${args.weekStart}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })} ${args.weekStart}. All times are LOCAL in the timezone ${args.timezone}${args.city ? ` (property city: ${args.city})` : ""}. Never propose a time that has already passed.
 Pipeline: ${args.pipeline}. Content type: ${args.contentType}. Platforms: ${args.platforms.join(", ")}.
-${args.pipeline === "linkedin" ? "LinkedIn: weekday business hours work best (Tue–Thu mornings are typical)." : "Social: evenings and weekends tend to perform for entertainment content; avoid the very early morning."}
+${TIMING_HINT[args.pipeline].one}
 Already proposed this week (avoid clustering, keep the same platform at least a day apart):
 ${args.existing.length ? args.existing.map((e) => `- ${e.platform}: ${e.local}`).join("\n") : "- none"}
 
@@ -391,17 +401,15 @@ One slot per platform. Spread the platforms across different days/times where se
 export function getWeekPlanPrompt(args: {
   weekStart: string;
   timezone: string;
-  pipeline: "social" | "linkedin";
+  pipeline: "social" | "linkedin" | "blog";
   platforms: string[];
   count: number;
   existing: { slot_index: number; summary: string }[];
 }) {
-  const system = `You plan a week of social posts: which day and local time each post goes out. You choose them TOGETHER so the week is balanced. These are reasoned guesses from general posting patterns, not guaranteed optimal. Respond with a single valid JSON object only.`;
+  const system = `You plan a week of ${args.pipeline === "blog" ? "blog articles" : "social posts"}: which day and local time each one goes out. You choose them TOGETHER so the week is balanced. These are reasoned guesses from general posting patterns, not guaranteed optimal. Respond with a single valid JSON object only.`;
   const user = `Week starts Monday ${args.weekStart} (7 days: Mon–Sun). All times are LOCAL in ${args.timezone}.
 Pipeline: ${args.pipeline}. Posts to plan: ${args.count} (slot_index 1..${args.count}). Each post goes to: ${args.platforms.join(", ")}.
-${args.pipeline === "linkedin"
-    ? "LinkedIn: weekday business hours (Tue–Thu mornings are typical); never weekends."
-    : "Social (entertaining content): evenings and weekends tend to perform; avoid early morning."}
+${TIMING_HINT[args.pipeline].week}
 Rules:
 - Spread the ${args.count} post${args.count === 1 ? "" : "s"} across different days — don't cluster them. Keep posts on the same platform at least a day apart.
 - Use different days/times across the platforms of one post where sensible; vary the times across the week.

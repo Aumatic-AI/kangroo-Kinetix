@@ -118,6 +118,23 @@ export interface WordPressPublication {
   error: string | null;
   attempts: number;
   publishedAt: string | null;
+  /** The blog's AI-chosen publish time (UTC). */
+  scheduledAt: string | null;
+}
+
+/** One platform's publishing record for a LIVE social/LinkedIn creative (social_posts). */
+export interface AutomationPost {
+  id: string;
+  platform: string;
+  status: "scheduled" | "held" | "publishing" | "published" | "failed" | "cancelled" | "skipped";
+  scheduledAt: string | null;
+  timezone: string | null;
+  publishedAt: string | null;
+  error: string | null;
+  /** The request may or may not have reached the platform; a person has to confirm. */
+  outcomeUnknown: boolean;
+  /** Link to the live post, when Upload-Post returned one. */
+  url: string | null;
 }
 
 export interface ContentDetail {
@@ -127,6 +144,9 @@ export interface ContentDetail {
   decision: { reason?: string; concept?: string; theme?: string; strategy?: CreativeStrategySummary; warnings?: string[] } | null;
   /** Blogs only; null until a Live blog is generated. */
   wordpress: WordPressPublication | null;
+  /** Live social/LinkedIn only: one record per platform, plus platforms that couldn't be scheduled. */
+  posts: AutomationPost[];
+  notScheduled: { platform: string; reason: "no_proposed_time" | "no_connection" | "proposed_time_passed" }[];
 }
 
 export interface RevisionQa {

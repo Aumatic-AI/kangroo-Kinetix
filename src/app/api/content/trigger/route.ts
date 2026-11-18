@@ -3,17 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { inngest } from "@/services/inngest/client";
 
 /**
- * TEMPORARY manual "Generate now" for the testing phase.
+ * Manual "Generate now", in either mode (trigger_manual_content_cycle decides by the current mode).
  *
  * Adds N social images and N social videos (each shared by TikTok/Instagram/Facebook — the user
- * picks the format, the AI follows it), N LinkedIn posts and N blog posts to the upcoming week's
- * Testing cycle, then kicks the generation worker.
- * It GENERATES INTO THE GALLERY ONLY — nothing is published to any account:
- * the database function refuses anything but Testing mode, and no code path
- * here (or in the worker) creates a publishing record.
+ * picks the format, the AI follows it), N LinkedIn posts and N blog posts, then kicks the worker.
+ * - Testing: into the UPCOMING week's Testing cycle; gallery only, never published (the database
+ *   refuses any publishing record for Testing content).
+ * - Live: into the CURRENT week's Live cycle; each creative gets an AI-chosen time in the next
+ *   7 days and is then published like any Live content. Owners/admins only (checked in SQL).
  *
- * Runs on the signed-in user's session: trigger_manual_content_cycle checks the
- * caller is editor+ and that automation is enabled, so no service role is used.
+ * Runs on the signed-in user's session: the function checks the caller's role and that automation
+ * is enabled, so no service role is used.
  */
 export async function POST(request: Request) {
   try {

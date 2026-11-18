@@ -41,7 +41,9 @@ export function useContentDetail(id: string | null) {
     enabled: !!id,
     refetchInterval: (q) => (
       q.state.data?.item.generationStatus === "processing" || q.state.data?.item.regenerating
-      || q.state.data?.wordpress?.status === "pending" || q.state.data?.wordpress?.status === "publishing" ? POLL_MS : false),
+      || q.state.data?.wordpress?.status === "publishing"
+      || (q.state.data?.wordpress?.status === "pending" && Date.parse(q.state.data.wordpress.scheduledAt ?? "") <= Date.now())
+      || q.state.data?.posts?.some((p) => p.status === "publishing" && !p.outcomeUnknown) ? POLL_MS : false),
   });
 }
 
@@ -63,7 +65,7 @@ export function useAutomationSettings() {
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (patch: Partial<Pick<AutomationSettings, "socialImageFrequency" | "socialVideoFrequency" | "linkedinFrequency" | "blogFrequency" | "isEnabled">>) =>
+    mutationFn: async (patch: Partial<Pick<AutomationSettings, "socialImageFrequency" | "socialVideoFrequency" | "linkedinFrequency" | "blogFrequency" | "isEnabled" | "mode" | "autoRunEnabled">>) =>
       (await fetchJson<{ settings: AutomationSettings }>("/api/content/settings", {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
       })).settings,
@@ -109,6 +111,30 @@ export function useRetryWordPress() {
     mutationFn: (publicationId: string) =>
       fetchJson<{ success: true }>("/api/content/wordpress/retry", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publicationId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contentKeys.all }),
+  });
+}
+
+/** Re-queue a failed Live social/LinkedIn post (re-checks everything, then publishes now). */
+export function useRetryPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (socialPostId: string) =>
+      fetchJson<{ success: true }>("/api/content/posts/retry-publish", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ socialPostId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contentKeys.all }),
+  });
+}
+
+/** Confirm what happened to a post whose publish outcome is unknown, after checking the platform. */
+export function useResolvePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { socialPostId: string; outcome: "published" | "failed" }) =>
+      fetchJson<{ success: true }>("/api/content/posts/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: contentKeys.all }),
   });

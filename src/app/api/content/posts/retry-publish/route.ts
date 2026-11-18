@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/services/inngest/client";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -7,7 +8,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * Retry a FAILED automation post. `retry_failed_publish` re-runs the same
  * eligibility checks as the publishing worker (Live mode, automation enabled,
  * property active, current + valid revision, healthy connection), refuses
- * posts whose outcome is unknown, and only re-queues — the worker publishes.
+ * posts whose outcome is unknown, and re-queues it for now; the event below
+ * hands it to the publisher (content/publish-post).
  * Runs on the user's session; the function checks editor+ membership itself.
  */
 export async function POST(request: Request) {
@@ -21,6 +23,7 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: error.code === "42501" ? 403 : 409 });
     }
+    await inngest.send({ name: "content/publish-post", data: { postId: body.socialPostId } });
     return NextResponse.json({ success: true, status: data });
   } catch (error: unknown) {
     console.error("[CONTENT_RETRY_PUBLISH]", error);

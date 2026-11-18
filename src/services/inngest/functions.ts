@@ -1,5 +1,5 @@
 import { generateSocialImage } from "./social";
-import { processContentQueue, generateContentJob, regenerateContentRevision, weeklyContentCycle, publishBlogToWordPress } from "./content";
+import { processContentQueue, generateContentJob, regenerateContentRevision, weeklyContentCycle, publishBlogToWordPress, publishSocialPost, contentAutomationSweep } from "./content";
 import { socialScheduledPostCheck } from "@/jobs/social-scheduled-post-check.job";
 
 export const functions = [
@@ -10,4 +10,6 @@ export const functions = [
   regenerateContentRevision,
   weeklyContentCycle,
   publishBlogToWordPress,
+  publishSocialPost,
+  contentAutomationSweep,
 ];

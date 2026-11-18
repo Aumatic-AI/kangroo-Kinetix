@@ -11,7 +11,9 @@ import type { BlogBlock } from "@/services/content-automation/blog";
  * Publishes one Live blog to WordPress (blog_publications row → a published post).
  *
  * Only Live content ever has a blog_publications row (DB CHECK + trigger), so during
- * the testing phase this never runs and blogs stay in the gallery. Every step that
+ * the testing phase this never runs and blogs stay in the gallery. A row waits for its
+ * scheduled_at (the blog's AI-chosen publish time): an early event finds it 'not_due'
+ * and re-sends itself for that time. Every step that
  * talks to WordPress returns an outcome instead of throwing, so a definite rejection
  * vs. a "try again later" failure survives Inngest's step serialisation.
  *
@@ -155,13 +157,19 @@ export const publishBlogToWordPress = inngest.createFunction(
 
 /**
  * After a Live blog finishes generating, its blog_publications row already exists
- * (a DB trigger creates it); this sends the event that publishes it. A no-op for
- * Testing content and for social/LinkedIn, which never get a row.
+ * (a DB trigger creates it, timed for the blog's AI-chosen publish time); this sends
+ * the event that publishes it, timed for that moment. A no-op for Testing content
+ * and for social/LinkedIn, which never get a row.
  */
 export async function kickBlogPublication(step: Step, contentId: string) {
   const pub = await step.run("find-blog-publication", async () => {
-    const { data } = await supabase.from("blog_publications").select("id, status").eq("property_content_id", contentId).maybeSingle();
+    const { data } = await supabase.from("blog_publications").select("id, status, next_attempt_at").eq("property_content_id", contentId).maybeSingle();
     return data;
   });
-  if (pub?.status === "pending") await step.sendEvent("publish-blog", { name: "content/blog-publish", data: { publicationId: pub.id } });
+  if (pub?.status === "pending") {
+    await step.sendEvent("publish-blog", {
+      name: "content/blog-publish", data: { publicationId: pub.id },
+      ts: Math.max(Date.now(), Date.parse(pub.next_attempt_at as string) || Date.now()),
+    });
+  }
 }

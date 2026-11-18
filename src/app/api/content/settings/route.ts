@@ -45,10 +45,11 @@ export async function GET() {
 }
 
 /**
- * Partial update. During the testing phase two things are deliberately refused
- * here (and not just hidden in the UI): selecting Live mode, and turning on
- * auto-run — generation only starts from the manual button. The database
- * additionally restricts mode / enabled / auto-run changes to owners and admins.
+ * Partial update. Mode (testing/live), pause/resume and automatic weekly runs are
+ * owner/admin only — checked here and again by the database guard. Going Live
+ * means the Friday run's content is PUBLISHED: social/LinkedIn posts and WordPress
+ * blogs, each at its AI-proposed time. Leaving Live (or
+ * pausing) holds anything not yet published; going Live again releases it.
  */
 export async function PATCH(request: Request) {
   try {
@@ -67,12 +68,12 @@ export async function PATCH(request: Request) {
     const socialTotal = (update.social_image_frequency_per_week ?? row.social_image_frequency_per_week) + (update.social_video_frequency_per_week ?? row.social_video_frequency_per_week);
     if (socialTotal > 14) return NextResponse.json({ error: "Social images and videos together can't be more than 14 per week" }, { status: 400 });
     if (body.mode !== undefined) {
-      if (body.mode !== "testing") return NextResponse.json({ error: "Live mode isn't available yet — publishing hasn't been built. Testing mode only." }, { status: 400 });
-      update.automation_mode = "testing";
+      if (body.mode !== "testing" && body.mode !== "live") return NextResponse.json({ error: "mode must be \"testing\" or \"live\"" }, { status: 400 });
+      update.automation_mode = body.mode;
     }
     if (body.autoRunEnabled !== undefined) {
-      if (body.autoRunEnabled !== false) return NextResponse.json({ error: "Automatic weekly runs are switched off during testing. Use Generate now." }, { status: 400 });
-      update.auto_run_enabled = false;
+      if (typeof body.autoRunEnabled !== "boolean") return NextResponse.json({ error: "autoRunEnabled must be true or false" }, { status: 400 });
+      update.auto_run_enabled = body.autoRunEnabled;
     }
     if (body.isEnabled !== undefined) {
       if (typeof body.isEnabled !== "boolean") return NextResponse.json({ error: "isEnabled must be true or false" }, { status: 400 });
@@ -84,17 +85,25 @@ export async function PATCH(request: Request) {
       (update.automation_mode !== undefined && update.automation_mode !== row.automation_mode) ||
       (update.is_enabled !== undefined && update.is_enabled !== row.is_enabled) ||
       (update.auto_run_enabled !== undefined && update.auto_run_enabled !== row.auto_run_enabled);
-    if (adminOnly && !canAdmin) return NextResponse.json({ error: "Only owners and admins can pause/resume automation" }, { status: 403 });
+    if (adminOnly && !canAdmin) return NextResponse.json({ error: "Only owners and admins can change the mode, pause/resume or automatic runs" }, { status: 403 });
 
     const { error } = await supabase.from("content_automation_settings").update(update).eq("business_id", businessId);
     if (error) return NextResponse.json({ error: error.message }, { status: error.code === "42501" ? 403 : 400 });
     const { row: fresh } = await load();
-    // Going Live (or resuming while Live): the settings trigger moved held blog publications
-    // back to pending — hand them to the WordPress publisher.
+    // Going Live (or resuming while Live): the settings trigger released held posts and blog
+    // publications (revalidated; anything no longer publishable is skipped). Hand them to the
+    // publishers — each social post timed for its own slot. The 15-minute sweep is the backstop.
     const wasLive = row.automation_mode === "live" && row.is_enabled;
     if (!wasLive && fresh.automation_mode === "live" && fresh.is_enabled) {
-      const { data: pending } = await supabase.from("blog_publications").select("id").eq("business_id", businessId).eq("status", "pending");
-      if (pending?.length) await inngest.send(pending.map((p) => ({ name: "content/blog-publish", data: { publicationId: p.id } })));
+      const [{ data: pending }, { data: scheduled }] = await Promise.all([
+        supabase.from("blog_publications").select("id").eq("business_id", businessId).eq("status", "pending"),
+        supabase.from("social_posts").select("id, scheduled_at").eq("business_id", businessId).not("property_content_id", "is", null).eq("status", "scheduled"),
+      ]);
+      const events = [
+        ...(pending ?? []).map((p) => ({ name: "content/blog-publish", data: { publicationId: p.id } })),
+        ...(scheduled ?? []).map((p) => ({ name: "content/publish-post", data: { postId: p.id }, ts: Math.max(Date.now(), Date.parse(p.scheduled_at as string)) })),
+      ];
+      if (events.length) await inngest.send(events);
     }
     return NextResponse.json({ settings: toBody(fresh, canAdmin) });
   } catch (error: unknown) {

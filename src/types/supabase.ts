@@ -71,6 +71,7 @@ export type Database = {
           property_content_id: string
           publish_started_at: string | null
           published_at: string | null
+          scheduled_at: string | null
           status: string
           updated_at: string
           wp_media: Json
@@ -92,6 +93,7 @@ export type Database = {
           property_content_id: string
           publish_started_at?: string | null
           published_at?: string | null
+          scheduled_at?: string | null
           status?: string
           updated_at?: string
           wp_media?: Json
@@ -113,6 +115,7 @@ export type Database = {
           property_content_id?: string
           publish_started_at?: string | null
           published_at?: string | null
+          scheduled_at?: string | null
           status?: string
           updated_at?: string
           wp_media?: Json
@@ -1560,6 +1563,10 @@ export type Database = {
       complete_generation_job: {
         Args: { p_queue: string; p_worker: string }
         Returns: undefined
+      }
+      confirm_unknown_publish: {
+        Args: { p_outcome: string; p_post: string }
+        Returns: string
       }
       content_publish_max_lateness: { Args: never; Returns: string }
       current_user_role: {

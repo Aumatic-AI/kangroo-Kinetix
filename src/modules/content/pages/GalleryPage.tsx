@@ -99,9 +99,11 @@ function GridSkeleton() {
 
 /**
  * The gallery: everything the AI generated, newest first, with its proposed
- * posting times. Generated content stays here — in the testing phase nothing is
- * published anywhere. "Generate now" is the TEMPORARY manual trigger that
- * replaces the weekly automation until content generation is finalized.
+ * posting times. In Testing nothing is published anywhere; in Live, automation
+ * content is published (social/LinkedIn and WordPress blogs, each at its AI-chosen time) and
+ * each drawer shows what happened per platform. "Generate now" works in both: in
+ * Testing it fills next week's private gallery; in Live (owners/admins) it adds to the
+ * current week and publishes each item at an AI-chosen time in the next 7 days.
  */
 export function GalleryPage() {
   const [page, setPage] = useState(1);
@@ -137,6 +139,7 @@ export function GalleryPage() {
   });
 
   const enabled = settings.data?.isEnabled ?? false;
+  const live = settings.data?.mode === "live";
   const generate = async () => {
     try {
       await trigger.mutateAsync({
@@ -157,12 +160,22 @@ export function GalleryPage() {
           <h2 className="text-2xl font-bold text-text">Content Gallery</h2>
           <p className="text-sm text-muted mt-1">AI-generated property content — social posts, LinkedIn posts and blogs. Generated content stays here.</p>
         </div>
-        <Button onClick={() => setConfirmOpen(true)} disabled={!enabled}><Sparkles /> Generate now</Button>
+        <Button onClick={() => setConfirmOpen(true)} disabled={!enabled || (live && !settings.data?.canAdmin)} title={live && !settings.data?.canAdmin ? "In Live mode only owners and admins can generate content (it will be published)." : undefined}><Sparkles /> Generate now</Button>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap rounded-lg border border-default bg-surface px-4 py-3 text-sm">
-        <Pill tone="warning">Testing mode</Pill>
-        <span className="text-muted">Nothing is published anywhere — blogs are display-only. Automatic weekly runs are off.</span>
+        {live ? (
+          <>
+            <Pill tone="success">Live</Pill>
+            <span className="text-muted">Automation content is published: social and LinkedIn posts and WordPress blogs, each at its AI-chosen time. Earlier Testing content stays private.</span>
+          </>
+        ) : (
+          <>
+            <Pill tone="warning">Testing mode</Pill>
+            <span className="text-muted">Nothing is published anywhere.</span>
+          </>
+        )}
+        {settings.data && <span className="text-muted">Automatic weekly runs are {settings.data.autoRunEnabled ? "on (Fridays 18:00)" : "off"}.</span>}
         {settings.data && !enabled && (
           <span className="text-muted">Generation is paused — <Link href={ROUTES.CONTENT.AUTOMATION} className="text-text font-medium hover:underline">enable it in Automation</Link> to use Generate now.</span>
         )}
@@ -216,8 +229,10 @@ export function GalleryPage() {
       <ConfirmModal
         open={confirmOpen}
         onOpenChange={(o) => { if (!trigger.isPending) setConfirmOpen(o); }}
-        title="Generate content now?"
-        description="The AI picks the next properties in the rotation and creates content for the upcoming week. This only fills the gallery — nothing is published."
+        title={live ? "Generate and publish content now?" : "Generate content now?"}
+        description={live
+          ? "Live mode: the AI picks the next properties in the rotation, creates the content, and PUBLISHES each item at an AI-chosen time in the next 7 days (blogs to WordPress, posts to the connected accounts). This is on top of the weekly run."
+          : "The AI picks the next properties in the rotation and creates content for the upcoming week. This only fills the gallery — nothing is published."}
         details={
           <dl className="text-sm space-y-3">
             {([
@@ -234,7 +249,7 @@ export function GalleryPage() {
                 <Switch checked={include[key]} onCheckedChange={(v) => setInclude((c) => ({ ...c, [key]: v }))} />
               </div>
             ))}
-            <div className="flex justify-between gap-4 pt-1"><dt className="text-muted">Posting times</dt><dd className="font-medium text-text text-right">Proposed by the AI for social and LinkedIn, not scheduled</dd></div>
+            <div className="flex justify-between gap-4 pt-1"><dt className="text-muted">Posting times</dt><dd className="font-medium text-text text-right">{live ? "Chosen by the AI in the next 7 days, then published" : "Proposed by the AI, not scheduled (Testing)"}</dd></div>
           </dl>
         }
         confirmLabel="Generate"

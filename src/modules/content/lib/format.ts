@@ -1,8 +1,8 @@
 import type { ContentType, MediaInfo, ProposedSlot } from "../types/content.types";
 
-export const PLATFORM_LABEL: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", linkedin: "LinkedIn" };
+export const PLATFORM_LABEL: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", linkedin: "LinkedIn", blog: "Blog (WordPress)" };
 export const TYPE_LABEL: Record<ContentType, string> = { video: "Video", image: "Image", text_image: "Text + image", blog: "Blog" };
-export const PIPELINE_LABEL = { social: "TikTok · Instagram · Facebook", linkedin: "LinkedIn", blog: "Blog (display only)" } as const;
+export const PIPELINE_LABEL = { social: "TikTok · Instagram · Facebook", linkedin: "LinkedIn", blog: "Blog (WordPress when Live)" } as const;
 
 /** A proposed UTC instant, shown in the timezone it was scheduled for, e.g. "Tue, Nov 10, 7:00 PM EST". */
 export function formatSlot(slot: Pick<ProposedSlot, "scheduled_at" | "timezone">): string {

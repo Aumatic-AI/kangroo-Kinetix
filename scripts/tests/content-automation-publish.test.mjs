@@ -184,3 +184,21 @@ test("classifyPublishError table", () => {
   assert.equal(k(httpErr(404)).retryable, false);
   for (const e of [httpErr(408), httpErr(500), httpErr(503), new TypeError("fetch failed"), "weird", null]) assert.equal(k(e).kind, "unknown");
 });
+
+test("Facebook / LinkedIn without a page id are never sent (LinkedIn would go to the personal profile)", async () => {
+  for (const platform of ["facebook", "linkedin"]) {
+    const h = harness({ payload: PAYLOAD({ platform }), profile: { social_accounts: { [platform]: { username: "u" } } }, publish: async () => assert.fail("must not publish") });
+    const r = await publishClaimedPost(h.deps, { ...POST, platform });
+    assert.equal(r.outcome, "failed", platform);
+    assert.equal(h.upCalls.length, 0, platform);
+    assert.equal(h.finishes()[0].p_retryable, false);
+    assert.match(h.finishes()[0].p_error, /no (Facebook|LinkedIn) Page selected/);
+  }
+  // With the page id it goes out, targeting that page.
+  const h = harness({ payload: PAYLOAD({ platform: "linkedin", format: "text_image", connection_metadata: { linkedinPageId: "123" } }),
+    profile: { social_accounts: { linkedin: { username: "u" } } },
+    publish: async () => ({ success: true, results: { linkedin: { success: true, post_id: "li-1" } } }) });
+  const r = await publishClaimedPost(h.deps, { ...POST, platform: "linkedin" });
+  assert.equal(r.outcome, "published");
+  assert.equal(h.upCalls[0][1].linkedinPageId, "123");
+});

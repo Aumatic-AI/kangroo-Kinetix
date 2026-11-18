@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { loadMedia } from "@/modules/content/lib/media";
 import { toItem, toRevision, type ContentRow, type RevisionRow } from "@/modules/content/lib/mappers";
-import type { ClipSummary, ContentDetail, CreativeStrategySummary, WordPressPublication } from "@/modules/content/types/content.types";
+import type { AutomationPost, ClipSummary, ContentDetail, CreativeStrategySummary, WordPressPublication } from "@/modules/content/types/content.types";
+import { planAutomationPosts, type PlanRevision } from "@/services/content-automation/schedule-posts";
+import type { ProposedSlot } from "@/services/content-automation/schedule";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,21 +39,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const supabase = await createClient();
 
     const { data: content, error } = await supabase.from("property_content")
-      .select("id, property_id, pipeline_type, content_type, environment, generation_status, created_at, current_revision_id").eq("id", id).maybeSingle();
+      .select("id, business_id, property_id, pipeline_type, content_type, environment, generation_status, created_at, current_revision_id, archived_at").eq("id", id).maybeSingle();
     if (error) throw new Error(error.message);
     if (!content) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const [revRes, clipRes, propRes, pubRes] = await Promise.all([
+    const liveSocial = content.environment === "live" && (content.pipeline_type === "social" || content.pipeline_type === "linkedin");
+    const [revRes, clipRes, propRes, pubRes, postRes, connRes] = await Promise.all([
       supabase.from("content_revisions")
         .select("id, property_content_id, revision_number, caption, hashtags, script, video_format, video_duration, format_reason, validation_status, validation_errors, media_asset_id, proposed_schedule, generation_prompt, created_at, content_decision")
         .eq("property_content_id", id).order("revision_number", { ascending: false }),
       supabase.from("content_clips").select("revision_id, clip_index, status, duration_seconds, media_asset_id, last_error, attempts").eq("property_content_id", id).order("clip_index"),
       supabase.from("properties").select("id, title, city").eq("id", content.property_id).maybeSingle(),
       content.pipeline_type === "blog"
-        ? supabase.from("blog_publications").select("id, status, wp_url, error_message, attempt_count, published_at").eq("property_content_id", id).maybeSingle()
+        ? supabase.from("blog_publications").select("id, status, wp_url, error_message, attempt_count, published_at, scheduled_at").eq("property_content_id", id).maybeSingle()
         : Promise.resolve({ data: null }),
+      liveSocial
+        ? supabase.from("social_posts").select("id, platform, status, scheduled_at, schedule_timezone, published_at, error_message, publish_outcome_unknown, platform_post_id").eq("property_content_id", id)
+        : Promise.resolve({ data: [] }),
+      liveSocial
+        ? supabase.from("platform_connections").select("id, platform, status").eq("business_id", content.business_id).eq("account_kind", "upload_post")
+        : Promise.resolve({ data: [] }),
     ]);
-    const pub = pubRes.data as { id: string; status: WordPressPublication["status"]; wp_url: string | null; error_message: string | null; attempt_count: number; published_at: string | null } | null;
+    const pub = pubRes.data as { id: string; status: WordPressPublication["status"]; wp_url: string | null; error_message: string | null; attempt_count: number; published_at: string | null; scheduled_at: string | null } | null;
     if (revRes.error) throw new Error(revRes.error.message);
     if (clipRes.error) throw new Error(clipRes.error.message);
 
@@ -68,6 +77,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     const currentRow = revRows.find((r) => r.id === content.current_revision_id) ?? revRows[0];
+
+    // Live social/LinkedIn: the per-platform publishing records, and — through the same planner
+    // the scheduler uses — which platforms couldn't be scheduled and why.
+    const posts: AutomationPost[] = ((postRes.data ?? []) as {
+      id: string; platform: string; status: AutomationPost["status"]; scheduled_at: string | null; schedule_timezone: string | null;
+      published_at: string | null; error_message: string | null; publish_outcome_unknown: boolean; platform_post_id: string | null;
+    }[]).map((p) => ({
+      id: p.id, platform: p.platform, status: p.status, scheduledAt: p.scheduled_at, timezone: p.schedule_timezone,
+      publishedAt: p.published_at, error: p.error_message, outcomeUnknown: p.publish_outcome_unknown,
+      url: p.platform_post_id?.startsWith("http") ? p.platform_post_id : null,
+    }));
+    const current = revRows.find((r) => r.id === content.current_revision_id) as (RevisionRow & { content_decision?: { platformPosts?: PlanRevision["platformPosts"] } | null }) | undefined;
+    const notScheduled = liveSocial && current ? planAutomationPosts({
+      content: { pipeline: content.pipeline_type, contentType: content.content_type, environment: content.environment, archived: !!content.archived_at, generationStatus: content.generation_status, currentRevisionId: content.current_revision_id },
+      revision: { id: current.id, validation: current.validation_status, caption: current.caption, hashtags: current.hashtags, proposedSchedule: (current.proposed_schedule ?? null) as ProposedSlot[] | null, platformPosts: current.content_decision?.platformPosts ?? null },
+      connections: (connRes.data ?? []) as { id: string; platform: string; status: string }[],
+      existingPlatforms: posts.map((p) => p.platform),
+      live: true, now: Date.now(),
+    }).skipped : [];
     const d = currentRow?.content_decision?.plan?.data;
     const body: ContentDetail = {
       item: toItem(content as ContentRow, revisions, propRes.data ?? undefined),
@@ -76,7 +104,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         reason: d.reason, concept: d.concept ?? d.format, theme: d.theme ?? d.angle,
         strategy: toStrategy(d), warnings: currentRow?.content_decision?.warnings,
       } : null,
-      wordpress: pub ? { id: pub.id, status: pub.status, url: pub.wp_url, error: pub.error_message, attempts: pub.attempt_count, publishedAt: pub.published_at } : null,
+      posts, notScheduled,
+      wordpress: pub ? { id: pub.id, status: pub.status, url: pub.wp_url, error: pub.error_message, attempts: pub.attempt_count, publishedAt: pub.published_at, scheduledAt: pub.scheduled_at } : null,
     };
     return NextResponse.json(body);
   } catch (error: unknown) {

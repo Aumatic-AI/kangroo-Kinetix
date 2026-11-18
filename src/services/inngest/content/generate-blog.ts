@@ -11,6 +11,8 @@ import { supabase, storeRemoteMedia, withLogo, kieResultUrl, keepAlive, Permanen
 import { prepareReferenceImages } from "./references";
 import { classifyKieFailure, imageReferenceUrls } from "@/services/content-automation/reference-images";
 import type { CreativeParams } from "./generate-creative";
+import { chooseSchedule } from "./schedule-slots";
+import { addDays, mondayOf } from "@/services/content-automation/schedule";
 
 /**
  * Blog pipeline. For one listing the AI (1) looks at the listing photos,
@@ -18,9 +20,10 @@ import type { CreativeParams } from "./generate-creative";
  * the listing actually offers and writes it, (3) generates the images from the
  * listing photos, (4) validates, and files it in the gallery.
  *
- * Display-only, like every other content type during testing: it writes only the
- * gallery tables (property_content / content_revisions / media_assets), never a
- * social_posts row, never a schedule, never a publishing call.
+ * It writes only the gallery tables (property_content / content_revisions /
+ * media_assets) and never publishes itself. Like social posts it gets a proposed
+ * publish time (proposed_schedule, one slot with platform "blog") from the week
+ * plan or the AI; a LIVE blog is published to WordPress at that time (publish-blog.ts).
  *
  * Storage layout (no blog-specific columns): script = title, caption = full
  * Markdown, hashtags = tags, media_asset_id = hero image, content_decision.blog
@@ -199,6 +202,25 @@ export async function generateBlog(step: Step, p: CreativeParams): Promise<{ con
   })) as { contentId: string; revisionId: string; plan: StoredBlog };
 
   const { contentId, revisionId } = decided;
+
+  // ---- 3b. when it's published: same rules as social posts (week plan → previous time on
+  // regenerate → AI proposal, validated). Saved before the revision is completed, because a
+  // Live blog's publication is created from it at completion (blog_publications.scheduled_at).
+  await step.run("schedule", async () => {
+    const [{ data: cycle }, { data: settings }, { data: prop }] = await Promise.all([
+      p.cycleId ? supabase.from("content_generation_cycles").select("week_start").eq("id", p.cycleId).single() : Promise.resolve({ data: null }),
+      supabase.from("content_automation_settings").select("generation_timezone").eq("business_id", p.businessId).maybeSingle(),
+      supabase.from("properties").select("timezone").eq("id", p.propertyId).single(),
+    ]);
+    const slots = await chooseSchedule({
+      mode: p.mode, cycleId: p.cycleId, slotIndex: p.slotIndex, pipeline: "blog", contentId, platforms: ["blog"],
+      weekStart: (cycle as { week_start?: string } | null)?.week_start ?? addDays(mondayOf(new Date().toISOString().slice(0, 10)), 7),
+      timezone: prop?.timezone || settings?.generation_timezone || "America/Toronto",
+      contentType: "blog", city: loaded.property.city,
+    });
+    const { error } = await supabase.from("content_revisions").update({ proposed_schedule: slots }).eq("id", revisionId);
+    if (error) throw new Error("could not save the publish time: " + error.message);
+  });
 
   // ---- 4. images, generated from the listing photos ---------------------------
   // Progress (task ids, stored assets) is saved on the revision as it happens, so a

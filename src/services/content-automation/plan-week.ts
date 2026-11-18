@@ -24,10 +24,10 @@ import { validateWeekPlan, type PlannedPost, type WeekPlan } from "./schedule";
 export async function planCycleWeek(
   supabase: SupabaseClient,
   cycleId: string,
-): Promise<{ social: number; linkedin: number }> {
+): Promise<{ social: number; linkedin: number; blog: number }> {
   const { data: cycle, error } = await supabase
     .from("content_generation_cycles")
-    .select("id, business_id, week_start, social_target_count, linkedin_target_count, week_plan")
+    .select("id, business_id, week_start, social_target_count, linkedin_target_count, blog_target_count, week_plan")
     .eq("id", cycleId).single();
   if (error || !cycle) throw new Error(`planCycleWeek: cycle ${cycleId} not found: ${error?.message ?? "no row"}`);
 
@@ -36,12 +36,13 @@ export async function planCycleWeek(
   const timezone = settings?.generation_timezone ?? "America/Toronto";
 
   const prev = (cycle.week_plan ?? {}) as Partial<WeekPlan>;
-  const next: WeekPlan = { timezone, planned_at: new Date().toISOString(), social: prev.social ?? [], linkedin: prev.linkedin ?? [] };
-  const added = { social: 0, linkedin: 0 };
+  const next: Required<WeekPlan> = { timezone, planned_at: new Date().toISOString(), social: prev.social ?? [], linkedin: prev.linkedin ?? [], blog: prev.blog ?? [] };
+  const added = { social: 0, linkedin: 0, blog: 0 };
 
   const pipelines = [
     { key: "social" as const, count: cycle.social_target_count, platforms: [...SOCIAL_PLATFORM_IDS] as string[] },
     { key: "linkedin" as const, count: cycle.linkedin_target_count, platforms: ["linkedin"] },
+    { key: "blog" as const, count: cycle.blog_target_count ?? 0, platforms: ["blog"] },
   ];
 
   for (const { key, count, platforms } of pipelines) {
@@ -65,7 +66,7 @@ export async function planCycleWeek(
     added[key] = planned.length;
   }
 
-  if (added.social + added.linkedin > 0) {
+  if (added.social + added.linkedin + added.blog > 0) {
     const { error: upErr } = await supabase.from("content_generation_cycles").update({ week_plan: next }).eq("id", cycleId);
     if (upErr) throw new Error(`planCycleWeek: could not save the plan: ${upErr.message}`);
   }

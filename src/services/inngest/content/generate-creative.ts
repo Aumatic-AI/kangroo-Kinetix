@@ -19,9 +19,10 @@ import {
   MAX_BRIEF_REVISIONS, MAX_MEDIA_ATTEMPTS, briefFeedback, briefReviewSchema, decideMediaReview, mediaReviewSchema, mediaReviewUnavailable, scoreBrief,
   type BriefReview, type MediaReview,
 } from "@/services/content-automation/qa";
-import { addDays, mondayOf, validateProposedSchedule, type PlannedPost, type ProposedSlot } from "@/services/content-automation/schedule";
+import { addDays, mondayOf } from "@/services/content-automation/schedule";
+import { chooseSchedule, schedulePlatforms } from "./schedule-slots";
 import {
-  getSocialAgentPrompt, getLinkedInAgentPrompt, getSchedulePrompt, getBriefReviewPrompt, getMediaReviewPrompt, getNarrationWriterPrompt,
+  getSocialAgentPrompt, getLinkedInAgentPrompt, getBriefReviewPrompt, getMediaReviewPrompt, getNarrationWriterPrompt,
   type PropertyFacts, type BusinessFacts, type CreativeHistory,
 } from "@/prompts/content-automation";
 import { supabase, rpc, storeRemoteMedia, withLogo, ensureVideoLogo, ensureEndCard, kieResultUrl, keepAlive, isPermanentError, PermanentGenerationError, SOCIAL_PLATFORMS, type Step } from "./shared";
@@ -267,58 +268,13 @@ async function generateSocialOrLinkedIn(step: Step, p: SocialParams): Promise<{ 
   const { contentId, revisionId, contentType, plan } = decided;
 
   // ---- 3. posting times ------------------------------------------------------
-  // Preferred: the slot the weekly planner already chose for this job's position, so the
-  // week is balanced across all posts. A regeneration keeps the creative's existing
-  // slot. Otherwise (e.g. the manual trigger, no plan) the AI proposes for this creative
-  // alone and the validator enforces the rules against what other creatives already hold.
+  // When it goes out (week plan → previous slot on regenerate → AI proposal, validated). See schedule-slots.ts.
   await step.run("schedule", async () => {
-    const platforms = plan.kind === "linkedin" ? ["linkedin"] : [...SOCIAL_PLATFORMS];
-    let slots: ProposedSlot[] | null = null;
-
-    if (p.mode === "job" && p.cycleId && p.slotIndex) {
-      // Tolerant read: a missing column or no plan just means "fall back", never a failure.
-      const { data, error } = await supabase.from("content_generation_cycles").select("week_plan").eq("id", p.cycleId).single();
-      const weekPlan = !error ? (data?.week_plan as Partial<Record<"social" | "linkedin", PlannedPost[]>> | null) : null;
-      const entry = weekPlan?.[p.pipeline]?.find((x) => x.slot_index === p.slotIndex);
-      if (entry?.slots?.length && platforms.every((pf) => entry.slots.some((s) => s.platform === pf))) {
-        slots = entry.slots.map((s) => ({ ...s, source: "week_plan" as const }));
-      }
-    } else if (p.mode === "regen") {
-      const { data: pc } = await supabase.from("property_content").select("current_revision_id").eq("id", contentId).single();
-      if (pc?.current_revision_id) {
-        const { data: prev } = await supabase.from("content_revisions").select("proposed_schedule").eq("id", pc.current_revision_id).single();
-        if (Array.isArray(prev?.proposed_schedule) && prev.proposed_schedule.length) slots = prev.proposed_schedule as ProposedSlot[];
-      }
-    }
-
-    if (!slots) {
-      const taken: { platform: string; ms: number }[] = [];
-      const existingLocal: { platform: string; local: string }[] = [];
-      if (p.cycleId) {
-        const { data: others } = await supabase.from("property_content").select("id").eq("cycle_id", p.cycleId).neq("id", contentId);
-        if (others?.length) {
-          const { data: revs } = await supabase.from("content_revisions").select("proposed_schedule")
-            .in("property_content_id", others.map((o) => o.id)).not("proposed_schedule", "is", null);
-          for (const r of revs ?? []) for (const s of (r.proposed_schedule as ProposedSlot[]) ?? []) {
-            taken.push({ platform: s.platform, ms: Date.parse(s.scheduled_at) });
-            existingLocal.push({ platform: s.platform, local: s.local });
-          }
-        }
-      }
-      let raw: unknown = null;
-      try {
-        const { system, user } = getSchedulePrompt({
-          weekStart: loaded.weekStart, timezone: loaded.timezone, pipeline: p.pipeline, platforms,
-          contentType, city: loaded.property.city, existing: existingLocal,
-        });
-        raw = parseAgentJson(await aiOrchestrator.executeTask("analysis", user, "openai", { systemPrompt: system }));
-      } catch (e) {
-        console.warn("[CONTENT_SCHEDULE] AI proposal unavailable, using defaults:", e instanceof Error ? e.message : e);
-      }
-      slots = validateProposedSchedule({ weekStart: loaded.weekStart, timezone: loaded.timezone, platforms, raw, taken })
-        .map((s) => ({ ...s, source: "per_creative" as const }));
-    }
-
+    const slots = await chooseSchedule({
+      mode: p.mode, cycleId: p.cycleId, slotIndex: p.slotIndex, pipeline: p.pipeline as "social" | "linkedin", contentId,
+      platforms: schedulePlatforms(plan.kind === "linkedin" ? "linkedin" : "social", SOCIAL_PLATFORMS),
+      weekStart: loaded.weekStart, timezone: loaded.timezone, contentType, city: loaded.property.city,
+    });
     const { error } = await supabase.from("content_revisions").update({ proposed_schedule: slots }).eq("id", revisionId);
     if (error) throw new Error("could not save proposed schedule: " + error.message);
   });

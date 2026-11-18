@@ -11,11 +11,11 @@ import { Loader } from "@/components/ui/Loader";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/utils/datetime";
 import { Pill, Field } from "@/modules/listings/components/ListingBits";
-import { useContentDetail, useRegenerate, useRetryWordPress } from "../hooks/useContent";
+import { useContentDetail, useRegenerate, useResolvePost, useRetryPost, useRetryWordPress } from "../hooks/useContent";
 import { PLATFORM_LABEL, TYPE_LABEL, describeMedia, formatSlot } from "../lib/format";
 import { BlogView } from "./BlogView";
 import { GenerationChip, MediaPreview } from "./ContentBits";
-import type { ContentDetail, RevisionSummary, WordPressPublication } from "../types/content.types";
+import type { AutomationPost, ContentDetail, ProposedSlot, RevisionSummary, WordPressPublication } from "../types/content.types";
 
 const VALIDATION_TONE = { valid: "success", pending: "warning", invalid: "danger" } as const;
 
@@ -27,7 +27,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 const WP_STATUS: Record<WordPressPublication["status"], { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
-  pending: { label: "Queued", tone: "warning" },
+  pending: { label: "Scheduled", tone: "neutral" },
   publishing: { label: "Publishing", tone: "warning" },
   published: { label: "Published", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
@@ -35,22 +35,31 @@ const WP_STATUS: Record<WordPressPublication["status"], { label: string; tone: "
   skipped: { label: "Skipped", tone: "neutral" },
 };
 
-/** Where a blog goes: Testing blogs stay here; a Live blog is published to WordPress as soon as it's generated. */
-function WordPressSection({ environment, publication }: { environment: "testing" | "live"; publication: WordPressPublication | null }) {
+/** Where a blog goes: Testing blogs stay here; a Live blog is published to WordPress at its AI-chosen time. */
+function WordPressSection({ environment, publication, planned }: { environment: "testing" | "live"; publication: WordPressPublication | null; planned: ProposedSlot | null }) {
   const retry = useRetryWordPress();
+  const plannedLine = planned && (
+    <Field label="Publish time"><span className="font-normal">{formatSlot(planned)}</span> <span className="text-xs text-muted">· {planned.reason}</span></Field>
+  );
   if (environment === "testing") {
-    return <p className="text-xs text-muted">Testing content stays in the gallery and is never published. Once automation is Live, each new blog is published to WordPress as soon as it&apos;s generated. Use Copy Markdown to take this post elsewhere.</p>;
+    return (
+      <div className="space-y-2">
+        {plannedLine}
+        <p className="text-xs text-muted">Testing content stays in the gallery and is never published. In Live mode, each blog is published to WordPress at its AI-chosen time in the week. Use Copy Markdown to take this post elsewhere.</p>
+      </div>
+    );
   }
   if (!publication) {
-    return <p className="text-xs text-muted">This blog will be published to WordPress once it has a valid version.</p>;
+    return <div className="space-y-2">{plannedLine}<p className="text-xs text-muted">This blog will be scheduled for WordPress once it has a valid version.</p></div>;
   }
   const s = WP_STATUS[publication.status];
+  const when = publication.publishedAt ?? (publication.status === "pending" || publication.status === "held" ? publication.scheduledAt : null);
   return (
     <div className="space-y-2">
       <SectionTitle>WordPress</SectionTitle>
       <div className="flex items-center gap-2 flex-wrap">
         <Pill tone={s.tone}>{s.label}</Pill>
-        {publication.publishedAt && <span className="text-xs text-muted">{formatDateTime(publication.publishedAt)}</span>}
+        {when && <span className="text-xs text-muted">{planned && !publication.publishedAt ? formatSlot({ scheduled_at: when, timezone: planned.timezone }) : formatDateTime(when)}</span>}
         {publication.url && (
           <a href={publication.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-medium text-text underline underline-offset-2">
             View post <ExternalLink className="w-3.5 h-3.5" />
@@ -65,6 +74,122 @@ function WordPressSection({ environment, publication }: { environment: "testing"
       {publication.status === "held" && <p className="text-xs text-muted">Automation is paused or not Live. It publishes when automation is Live again.</p>}
       {publication.error && <p className="text-xs text-danger">{publication.error}</p>}
       {retry.error && <p className="text-xs text-danger">{retry.error.message}</p>}
+    </div>
+  );
+}
+
+const POST_STATUS: Record<AutomationPost["status"], { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  scheduled: { label: "Scheduled", tone: "neutral" },
+  held: { label: "On hold", tone: "warning" },
+  publishing: { label: "Publishing", tone: "warning" },
+  published: { label: "Published", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+  skipped: { label: "Skipped", tone: "neutral" },
+};
+
+const NOT_SCHEDULED_REASON: Record<ContentDetail["notScheduled"][number]["reason"], string> = {
+  no_connection: "No connected account for this platform — connect it, then it's scheduled within 15 minutes.",
+  no_proposed_time: "No posting time was proposed for this platform.",
+  proposed_time_passed: "Its proposed time had passed by more than a day when the creative finished.",
+};
+
+type PostAction = { kind: "retry" | "published" | "failed"; post: AutomationPost };
+
+/** Live social/LinkedIn: one row per platform with what happened to it, and the two human actions. */
+function PublishingSection({ posts, notScheduled }: { posts: AutomationPost[]; notScheduled: ContentDetail["notScheduled"] }) {
+  const retry = useRetryPost();
+  const resolve = useResolvePost();
+  const [action, setAction] = useState<PostAction | null>(null);
+  const busy = retry.isPending || resolve.isPending;
+  const error = action?.kind === "retry" ? retry.error?.message : resolve.error?.message;
+
+  const run = async () => {
+    if (!action) return;
+    try {
+      if (action.kind === "retry") await retry.mutateAsync(action.post.id);
+      else await resolve.mutateAsync({ socialPostId: action.post.id, outcome: action.kind });
+      setAction(null);
+    } catch {
+      /* shown inline in the dialog */
+    }
+  };
+  const label = (p: AutomationPost) => PLATFORM_LABEL[p.platform] ?? p.platform;
+
+  return (
+    <div className="space-y-2">
+      <SectionTitle>Publishing</SectionTitle>
+      {posts.length === 0 && notScheduled.length === 0 ? (
+        <p className="text-sm text-muted">Posts are scheduled as soon as this creative finishes generating.</p>
+      ) : (
+        <div className="border border-default rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader><TableRow><TableHead>Platform</TableHead><TableHead>When (local)</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {posts.map((p) => {
+                const s = p.outcomeUnknown ? { label: "Unconfirmed", tone: "warning" as const } : POST_STATUS[p.status];
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium align-top">{label(p)}</TableCell>
+                    <TableCell className="whitespace-nowrap align-top">
+                      {p.scheduledAt ? formatSlot({ scheduled_at: p.publishedAt ?? p.scheduledAt, timezone: p.timezone ?? "America/Toronto" }) : "—"}
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="space-y-1">
+                        <Pill tone={s.tone}>{s.label}</Pill>
+                        {p.outcomeUnknown && <p className="text-xs text-muted">The request may have reached {label(p)}. Check the account, then confirm.</p>}
+                        {p.error && !p.outcomeUnknown && p.status !== "published" && <p className="text-xs text-danger">{p.error}</p>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="flex justify-end gap-2">
+                        {p.url && (
+                          <a href={p.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-medium text-text underline underline-offset-2 whitespace-nowrap">
+                            View <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        {p.status === "failed" && !p.outcomeUnknown && <Button size="sm" variant="outline" onClick={() => setAction({ kind: "retry", post: p })}>Retry</Button>}
+                        {p.outcomeUnknown && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => setAction({ kind: "published", post: p })}>It&apos;s live</Button>
+                            <Button size="sm" variant="outline" onClick={() => setAction({ kind: "failed", post: p })}>It didn&apos;t post</Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {notScheduled.map((n) => (
+                <TableRow key={n.platform}>
+                  <TableCell className="font-medium align-top">{PLATFORM_LABEL[n.platform] ?? n.platform}</TableCell>
+                  <TableCell className="align-top">—</TableCell>
+                  <TableCell className="align-top">
+                    <div className="space-y-1"><Pill tone="neutral">Not scheduled</Pill><p className="text-xs text-muted">{NOT_SCHEDULED_REASON[n.reason]}</p></div>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      <p className="text-xs text-muted">Times are the AI&apos;s proposals, published automatically through Upload-Post. Posts are held while automation is paused or in Testing, and anything more than 6 hours late is skipped.</p>
+
+      <ConfirmModal
+        open={!!action}
+        onOpenChange={(o) => { if (!busy && !o) setAction(null); }}
+        title={action?.kind === "retry" ? `Retry the ${action ? label(action.post) : ""} post?` : action?.kind === "published" ? "Mark as published?" : "Mark as not posted?"}
+        description={action?.kind === "retry"
+          ? "Every check runs again, then it's published right away."
+          : action?.kind === "published"
+            ? "Only if you can see the post on the account. It's recorded as published and never sent again."
+            : "Only if you've checked the account and it isn't there. It's recorded as failed, and you can then retry it."}
+        confirmLabel={action?.kind === "retry" ? "Retry now" : "Confirm"}
+        loading={busy}
+        error={error}
+        onConfirm={run}
+      />
     </div>
   );
 }
@@ -296,7 +421,9 @@ function Body({ detail }: { detail: ContentDetail }) {
       )}
 
       {isBlog ? (
-        <WordPressSection environment={item.environment} publication={detail.wordpress} />
+        <WordPressSection environment={item.environment} publication={detail.wordpress} planned={rev?.proposedSchedule?.find((s) => s.platform === "blog") ?? null} />
+      ) : item.environment === "live" ? (
+        <PublishingSection posts={detail.posts} notScheduled={detail.notScheduled} />
       ) : (
         <div className="space-y-2">
           <SectionTitle>Proposed posting times</SectionTitle>
